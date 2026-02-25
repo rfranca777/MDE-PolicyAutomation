@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.env
+*.log
+
+# Credentials & secrets
+config.json
+*.secret
+*credentials*
+*-Credentials.json
+MDE-API-Credentials.json
+
+# Temp files
+temp/
+*.tmp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Azure artifacts
+*.zip
+deployment-output/
+
+# Reports (generated at runtime)
+reports/
+*.html
+!README.md

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#0d1b2a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1b2838;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00c2ff;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#0078d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5b2dff;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00c2ff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#00c2ff;stop-opacity:0" />
+    </linearGradient>
+    <filter id="neon">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  
+  <!-- Grid pattern -->
+  <g opacity="0.06">
+    <line x1="0" y1="50" x2="1200" y2="50" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="0" y1="100" x2="1200" y2="100" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="0" y1="150" x2="1200" y2="150" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="0" y1="250" x2="1200" y2="250" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="100" y1="0" x2="100" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="200" y1="0" x2="200" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="300" y1="0" x2="300" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="400" y1="0" x2="400" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="500" y1="0" x2="500" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="600" y1="0" x2="600" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="700" y1="0" x2="700" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="800" y1="0" x2="800" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="900" y1="0" x2="900" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="1000" y1="0" x2="1000" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+    <line x1="1100" y1="0" x2="1100" y2="300" stroke="#00c2ff" stroke-width="0.5"/>
+  </g>
+
+  <!-- Shield icon -->
+  <g transform="translate(80, 70)" filter="url(#neon)">
+    <path d="M60 0 L120 25 L120 70 C120 115 90 145 60 160 C30 145 0 115 0 70 L0 25 Z" 
+          fill="none" stroke="url(#accent)" stroke-width="2.5" opacity="0.9"/>
+    <path d="M60 20 L100 38 L100 70 C100 100 80 125 60 135 C40 125 20 100 20 70 L20 38 Z" 
+          fill="url(#accent)" opacity="0.15"/>
+    <!-- Policy/gear icon inside shield -->
+    <circle cx="60" cy="75" r="18" fill="none" stroke="#00c2ff" stroke-width="2" opacity="0.8"/>
+    <path d="M60 57 L63 62 L69 60 L67 66 L72 69 L67 72 L69 78 L63 76 L60 81 L57 76 L51 78 L53 72 L48 69 L53 66 L51 60 L57 62 Z" 
+          fill="none" stroke="#00c2ff" stroke-width="1.5" opacity="0.9"/>
+    <circle cx="60" cy="75" r="7" fill="#00c2ff" opacity="0.3"/>
+  </g>
+
+  <!-- Title -->
+  <text x="230" y="110" font-family="Consolas, 'Courier New', monospace" font-size="42" fill="#ffffff" font-weight="bold" filter="url(#neon)">
+    MDE Policy Automation
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="230" y="145" font-family="'Segoe UI', Arial, sans-serif" font-size="18" fill="#8bb8e8" letter-spacing="1">
+    Azure Policy • Intune Groups • Device Tags • Zero-Touch Governance
+  </text>
+
+  <!-- Tech pills -->
+  <g transform="translate(230, 170)">
+    <rect x="0" y="0" width="110" height="26" rx="13" fill="#0078d4" opacity="0.25" stroke="#0078d4" stroke-width="1"/>
+    <text x="55" y="17" font-family="'Segoe UI', sans-serif" font-size="11" fill="#7bc4ff" text-anchor="middle">Azure Policy</text>
+    
+    <rect x="120" y="0" width="85" height="26" rx="13" fill="#5b2dff" opacity="0.25" stroke="#5b2dff" stroke-width="1"/>
+    <text x="162" y="17" font-family="'Segoe UI', sans-serif" font-size="11" fill="#b39dff" text-anchor="middle">Intune</text>
+    
+    <rect x="215" y="0" width="100" height="26" rx="13" fill="#00c2ff" opacity="0.25" stroke="#00c2ff" stroke-width="1"/>
+    <text x="265" y="17" font-family="'Segoe UI', sans-serif" font-size="11" fill="#80e1ff" text-anchor="middle">MDE Tags</text>
+    
+    <rect x="325" y="0" width="90" height="26" rx="13" fill="#00ff88" opacity="0.2" stroke="#00ff88" stroke-width="1"/>
+    <text x="370" y="17" font-family="'Segoe UI', sans-serif" font-size="11" fill="#80ffbb" text-anchor="middle">Entra ID</text>
+    
+    <rect x="425" y="0" width="115" height="26" rx="13" fill="#ff6f00" opacity="0.25" stroke="#ff6f00" stroke-width="1"/>
+    <text x="482" y="17" font-family="'Segoe UI', sans-serif" font-size="11" fill="#ffb366" text-anchor="middle">14 Stages</text>
+  </g>
+
+  <!-- Bottom accent line -->
+  <rect x="0" y="290" width="1200" height="10" fill="url(#accent)" opacity="0.8"/>
+  
+  <!-- Version badge -->
+  <g transform="translate(1020, 45)">
+    <rect width="140" height="28" rx="14" fill="#00ff88" opacity="0.15" stroke="#00ff88" stroke-width="1"/>
+    <text x="70" y="18" font-family="Consolas, monospace" font-size="12" fill="#00ff88" text-anchor="middle">v1.0.4 • MIT</text>
+  </g>
+
+  <!-- ODefender badge -->
+  <g transform="translate(1020, 85)">
+    <rect width="140" height="28" rx="14" fill="#ff6f00" opacity="0.15" stroke="#ff6f00" stroke-width="1"/>
+    <text x="70" y="18" font-family="'Segoe UI', sans-serif" font-size="11" fill="#ff9f40" text-anchor="middle">ODefender Community</text>
+  </g>
+</svg>

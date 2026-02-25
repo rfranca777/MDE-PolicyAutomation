@@ -1,0 +1,133 @@
+{
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "allOf": [
+        {
+          "field": "type",
+          "equals": "Microsoft.Compute/virtualMachines"
+        },
+        {
+          "field": "Microsoft.Compute/virtualMachines/storageProfile.osDisk.osType",
+          "equals": "Windows"
+        }
+      ]
+    },
+    "then": {
+      "effect": "[parameters('effect')]",
+      "details": {
+        "type": "Microsoft.Compute/virtualMachines/extensions",
+        "name": "MDEDeviceTagExtension",
+        "roleDefinitionIds": [
+          "/providers/Microsoft.Authorization/roleDefinitions/9980e02c-c2be-4d73-94e8-173b1dc7cf3c"
+        ],
+        "existenceCondition": {
+          "allOf": [
+            {
+              "field": "Microsoft.Compute/virtualMachines/extensions/type",
+              "equals": "CustomScriptExtension"
+            },
+            {
+              "field": "Microsoft.Compute/virtualMachines/extensions/publisher",
+              "equals": "Microsoft.Compute"
+            },
+            {
+              "field": "Microsoft.Compute/virtualMachines/extensions/settings.commandToExecute",
+              "contains": "Set-MDEDeviceTag"
+            }
+          ]
+        },
+        "deployment": {
+          "properties": {
+            "mode": "incremental",
+            "template": {
+              "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+              "contentVersion": "1.0.0.0",
+              "parameters": {
+                "vmName": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "tagValue": {
+                  "type": "string"
+                },
+                "scriptUri": {
+                  "type": "string"
+                }
+              },
+              "resources": [
+                {
+                  "type": "Microsoft.Compute/virtualMachines/extensions",
+                  "apiVersion": "2021-11-01",
+                  "name": "[concat(parameters('vmName'), '/MDEDeviceTagExtension')]",
+                  "location": "[parameters('location')]",
+                  "properties": {
+                    "publisher": "Microsoft.Compute",
+                    "type": "CustomScriptExtension",
+                    "typeHandlerVersion": "1.10",
+                    "autoUpgradeMinorVersion": true,
+                    "settings": {
+                      "fileUris": [
+                        "[parameters('scriptUri')]"
+                      ]
+                    },
+                    "protectedSettings": {
+                      "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Set-MDEDeviceTag.ps1 -TagValue ', parameters('tagValue'))]"
+                    }
+                  }
+                }
+              ]
+            },
+            "parameters": {
+              "vmName": {
+                "value": "[field('name')]"
+              },
+              "location": {
+                "value": "[field('location')]"
+              },
+              "tagValue": {
+                "value": "[parameters('tagValue')]"
+              },
+              "scriptUri": {
+                "value": "[parameters('scriptUri')]"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "parameters": {
+    "tagValue": {
+      "type": "String",
+      "metadata": {
+        "displayName": "MDE Device Tag Value",
+        "description": "The device tag value to apply to Windows VMs for Microsoft Defender for Endpoint (e.g., DEV, PROD, TEST, STAGING)"
+      }
+    },
+    "scriptUri": {
+      "type": "String",
+      "metadata": {
+        "displayName": "Script URI",
+        "description": "URI of the Set-MDEDeviceTag.ps1 PowerShell script in an Azure Storage Account or publicly accessible repository"
+      }
+    },
+    "effect": {
+      "type": "String",
+      "defaultValue": "DeployIfNotExists",
+      "allowedValues": [
+        "DeployIfNotExists",
+        "AuditIfNotExists",
+        "Disabled"
+      ],
+      "metadata": {
+        "displayName": "Effect",
+        "description": "Enable or disable the execution of the policy"
+      }
+    }
+  },
+  "displayName": "Deploy MDE Device Tag to Windows Virtual Machines",
+  "description": "Automatically configures Microsoft Defender for Endpoint device tags on Windows VMs by setting the required registry key. The tag allows organizing devices into Device Groups in the MDE portal for applying specific antivirus and attack surface reduction policies. This policy uses DeployIfNotExists to apply the configuration to new and existing VMs."
+}
