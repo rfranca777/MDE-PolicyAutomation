@@ -24,7 +24,11 @@ $ResourceGroup     = "SecurityLab"
 $PolicyName        = "mde-device-tag-windows-vms"
 $PolicyDisplayName = "Deploy MDE Device Tag to Windows Virtual Machines"
 $AssignmentName    = "mde-tag-securitylab"
-$TagValue          = "SecLab-MDE"
+## TagValue segue a mesma lógica do projeto original v1.0.4:
+## $subNameClean = $subscriptionName -replace '[^a-zA-Z0-9-]','-' -replace '--+','-' -replace '^-|-$',''
+## $subNameShort = $subNameClean.Substring(0,[Math]::Min(40,$subNameClean.Length)).ToLower()
+## $TagValue     = "mde-policy-$subNameShort"
+$TagValue          = "mde-policy-me-mngenvmcap186458-rafaelluizf-1"
 # Script hosted on GitHub community repo (no storage dependency)
 $ScriptUri         = "https://raw.githubusercontent.com/rfranca777/MDE-PolicyAutomation/main/azure-policy/Set-MDEDeviceTag.ps1"
 $PolicyDefFile     = "$PSScriptRoot\azure-policy\policy-definition.json"
