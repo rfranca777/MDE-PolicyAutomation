@@ -24,16 +24,16 @@
         "existenceCondition": {
           "allOf": [
             {
-              "field": "Microsoft.Compute/virtualMachines/extensions/type",
-              "equals": "CustomScriptExtension"
-            },
-            {
               "field": "Microsoft.Compute/virtualMachines/extensions/publisher",
               "equals": "Microsoft.Compute"
             },
             {
-              "field": "Microsoft.Compute/virtualMachines/extensions/settings.commandToExecute",
-              "contains": "Set-MDEDeviceTag"
+              "field": "Microsoft.Compute/virtualMachines/extensions/type",
+              "equals": "CustomScriptExtension"
+            },
+            {
+              "field": "Microsoft.Compute/virtualMachines/extensions/provisioningState",
+              "equals": "Succeeded"
             }
           ]
         },
