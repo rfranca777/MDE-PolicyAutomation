@@ -32,4 +32,5 @@ deployment-output/
 # Reports (generated at runtime)
 reports/
 *.html
+!docs/*.html
 !README.md

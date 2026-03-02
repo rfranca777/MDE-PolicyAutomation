@@ -377,6 +377,20 @@ Once deployed, the system runs itself:
 
 ---
 
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| 📖 [**Step-by-Step Guide**](docs/STEP-BY-STEP-GUIDE.md) | Complete walkthrough of all 14 stages with portal screenshots and validation commands |
+| 🎨 [**Visual Guide (HTML)**](docs/STEP-BY-STEP-GUIDE.html) | Rich HTML version with terminal simulations, portal mockups, and print-to-PDF support |
+| 🏗️ [**Architecture**](docs/ARCHITECTURE.md) | 3-layer architecture deep-dive, security model, and naming conventions |
+| ⚡ [**Quick Start**](docs/QUICK-START.md) | Get running in 5 minutes — Option A (full automation) or Option B (policy only) |
+| 🔧 [**Manual Deploy**](docs/MANUAL-DEPLOY.md) | Step-by-step manual deployment for maximum control |
+
+> **💡 New to the project?** Start with the [Step-by-Step Guide](docs/STEP-BY-STEP-GUIDE.md) — it covers every stage with visual references to the Azure Portal and MDE Console.
+
+---
+
 ## 🤝 Contributing
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

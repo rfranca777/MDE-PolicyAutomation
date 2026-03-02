@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDE Policy Automation — Guia Completo Passo-a-Passo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;600;700&family=Cascadia+Code&display=swap');
+
+:root {
+    --azure-blue: #0078D4;
+    --azure-dark: #004578;
+    --mde-green: #00ff88;
+    --bg-dark: #1e1e1e;
+    --bg-card: #252526;
+    --bg-terminal: #0c0c0c;
+    --border: #3c3c3c;
+    --text-primary: #cccccc;
+    --text-bright: #ffffff;
+    --text-dim: #999999;
+    --success: #4ec9b0;
+    --warning: #dcdcaa;
+    --error: #f48771;
+    --info: #9cdcfe;
+    --accent: #c586c0;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    line-height: 1.7;
+    padding: 0;
+}
+
+.page-break { page-break-before: always; }
+
+/* Header */
+.header {
+    background: linear-gradient(135deg, var(--azure-dark) 0%, #001f3f 50%, #0a2a4a 100%);
+    padding: 60px 40px;
+    text-align: center;
+    border-bottom: 3px solid var(--mde-green);
+}
+.header h1 { font-size: 2.5em; color: var(--text-bright); margin-bottom: 10px; }
+.header .subtitle { font-size: 1.3em; color: var(--mde-green); margin-bottom: 20px; }
+.header .meta { color: var(--text-dim); font-size: 0.95em; }
+.header .badge {
+    display: inline-block; padding: 4px 14px; margin: 3px;
+    border-radius: 4px; font-size: 0.8em; font-weight: 600;
+}
+.badge-version { background: var(--mde-green); color: #000; }
+.badge-azure { background: var(--azure-blue); color: #fff; }
+.badge-ps { background: #5391FE; color: #fff; }
+
+/* Content container */
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 30px; }
+
+/* Section headers */
+h2 {
+    color: var(--azure-blue); font-size: 1.8em; margin: 50px 0 20px;
+    padding-bottom: 10px; border-bottom: 2px solid var(--azure-blue);
+}
+h3 { color: var(--mde-green); font-size: 1.3em; margin: 30px 0 15px; }
+h4 { color: var(--info); font-size: 1.1em; margin: 20px 0 10px; }
+
+/* Terminal simulation */
+.terminal {
+    background: var(--bg-terminal); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin: 20px 0; font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+.terminal-header {
+    background: #2d2d2d; padding: 8px 15px; display: flex; align-items: center; gap: 6px;
+}
+.terminal-dot { width: 12px; height: 12px; border-radius: 50%; }
+.terminal-dot.red { background: #ff5f57; }
+.terminal-dot.yellow { background: #febc2e; }
+.terminal-dot.green { background: #28c840; }
+.terminal-title { color: var(--text-dim); font-size: 0.8em; margin-left: 10px; }
+.terminal-body { padding: 15px 20px; font-size: 0.85em; line-height: 1.6; white-space: pre-wrap; }
+.terminal-body .prompt { color: #569cd6; }
+.terminal-body .ok { color: var(--success); }
+.terminal-body .warn { color: var(--warning); }
+.terminal-body .err { color: var(--error); }
+.terminal-body .info { color: var(--info); }
+.terminal-body .accent { color: var(--accent); }
+.terminal-body .dim { color: var(--text-dim); }
+
+/* Portal simulation */
+.portal {
+    background: #1b1b1b; border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; margin: 20px 0;
+}
+.portal-header {
+    background: var(--azure-blue); padding: 10px 20px; color: white; font-weight: 600; font-size: 0.9em;
+}
+.portal-breadcrumb { background: #252526; padding: 8px 20px; color: var(--text-dim); font-size: 0.8em; }
+.portal-body { padding: 20px; }
+.portal-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+.portal-table th {
+    text-align: left; padding: 10px 15px; background: #2d2d2d; color: var(--info);
+    border-bottom: 2px solid var(--azure-blue); font-size: 0.85em;
+}
+.portal-table td {
+    padding: 10px 15px; border-bottom: 1px solid var(--border); font-size: 0.85em;
+}
+.portal-table tr:hover { background: rgba(0,120,212,0.1); }
+.badge-ok { color: var(--success); font-weight: 600; }
+.badge-warn { color: var(--warning); font-weight: 600; }
+
+/* Architecture diagram */
+.diagram {
+    background: #1a1a2e; border: 2px solid var(--azure-blue); border-radius: 10px;
+    padding: 25px; margin: 20px 0; font-family: 'Cascadia Code', monospace; font-size: 0.8em;
+    color: var(--text-primary); white-space: pre; overflow-x: auto; line-height: 1.5;
+}
+
+/* Info boxes */
+.info-box {
+    border-radius: 8px; padding: 18px 22px; margin: 15px 0; font-size: 0.9em;
+}
+.info-box.tip { background: rgba(78,201,176,0.1); border-left: 4px solid var(--success); }
+.info-box.warning { background: rgba(220,220,170,0.1); border-left: 4px solid var(--warning); }
+.info-box.important { background: rgba(244,135,113,0.1); border-left: 4px solid var(--error); }
+.info-box.note { background: rgba(156,220,254,0.1); border-left: 4px solid var(--info); }
+.info-box strong { color: var(--text-bright); }
+
+/* Flow arrows */
+.flow {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin: 20px 0; flex-wrap: wrap;
+}
+.flow-step {
+    background: var(--bg-card); border: 1px solid var(--azure-blue); border-radius: 8px;
+    padding: 12px 18px; text-align: center; min-width: 150px; font-size: 0.85em;
+}
+.flow-step .num { color: var(--azure-blue); font-weight: 700; font-size: 1.2em; }
+.flow-step .desc { color: var(--text-primary); margin-top: 4px; }
+.flow-arrow { color: var(--mde-green); font-size: 1.5em; }
+
+/* TOC */
+.toc {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 25px 30px; margin: 30px 0;
+}
+.toc h3 { margin-top: 0; }
+.toc ol { padding-left: 25px; }
+.toc li { padding: 4px 0; color: var(--info); }
+.toc a { color: var(--info); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+/* Checklist */
+.checklist { list-style: none; padding: 0; }
+.checklist li {
+    padding: 10px 15px; margin: 5px 0; background: var(--bg-card);
+    border-radius: 6px; border-left: 3px solid var(--border);
+}
+.checklist li.done { border-left-color: var(--success); }
+
+/* Layer diagram */
+.layer {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; margin: 15px 0;
+}
+.layer-title {
+    font-weight: 700; font-size: 1.05em; margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.layer-title.l1 { color: var(--azure-blue); }
+.layer-title.l2 { color: var(--warning); }
+.layer-title.l3 { color: var(--error); }
+
+/* Stage table */
+.stage-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+.stage-table th {
+    background: var(--azure-dark); color: white; padding: 12px 15px;
+    text-align: left; font-size: 0.85em;
+}
+.stage-table td { padding: 10px 15px; border-bottom: 1px solid var(--border); font-size: 0.85em; }
+.stage-table tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.stage-table tr:hover { background: rgba(0,120,212,0.08); }
+
+/* Registry visual */
+.registry {
+    background: #1a1a2e; border: 2px solid var(--accent);
+    border-radius: 8px; padding: 20px; margin: 15px 0; font-family: 'Cascadia Code', monospace; font-size: 0.85em;
+}
+.registry .path { color: var(--accent); }
+.registry .key { color: var(--success); }
+.registry .value { color: var(--warning); }
+
+/* Print styles */
+@media print {
+    body { background: white; color: #333; }
+    .header { background: #0078D4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .terminal, .portal, .diagram, .registry { break-inside: avoid; }
+    .terminal-body, .portal-body { color: #333; }
+    h2 { color: #0078D4; }
+    h3 { color: #107c10; }
+    .info-box { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ CAPA ============ -->
+<div class="header">
+    <h1>🛡️ MDE Policy Automation</h1>
+    <div class="subtitle">Guia Completo Passo-a-Passo com Referências Visuais</div>
+    <div style="margin: 20px 0;">
+        <span class="badge badge-version">v1.0.4</span>
+        <span class="badge badge-azure">Azure Policy</span>
+        <span class="badge badge-ps">PowerShell</span>
+    </div>
+    <div class="meta">
+        <strong>Autor:</strong> Rafael França — Customer Success Architect, Cyber Security @ Microsoft<br>
+        <strong>Projeto:</strong> github.com/rfranca777/MDE-PolicyAutomation<br>
+        <strong>Comunidade:</strong> ODefender Community — Open-Source Security Automation
+    </div>
+</div>
+
+<div class="container">
+
+<!-- ============ TOC ============ -->
+<div class="toc">
+    <h3>📋 Índice</h3>
+    <ol>
+        <li><a href="#visao-geral">Visão Geral da Solução</a></li>
+        <li><a href="#pre-requisitos">Pré-Requisitos</a></li>
+        <li><a href="#stage1">Etapa 1 — Autenticação e Seleção de Subscription</a></li>
+        <li><a href="#stage2">Etapa 2 — Nomenclatura Inteligente</a></li>
+        <li><a href="#stage3">Etapa 3 — Resource Group</a></li>
+        <li><a href="#stage4">Etapa 4 — Grupo Entra ID (Security Group)</a></li>
+        <li><a href="#stage5">Etapa 5 — Automation Account</a></li>
+        <li><a href="#stage6">Etapa 6 — Managed Identity (Zero Trust)</a></li>
+        <li><a href="#stage7">Etapa 7 — RBAC Reader</a></li>
+        <li><a href="#stage8">Etapa 8 — Permissões Graph API</a></li>
+        <li><a href="#stage9">Etapa 9 — Módulo Az.Accounts</a></li>
+        <li><a href="#stage10">Etapa 10 — Runbook PowerShell</a></li>
+        <li><a href="#stage11">Etapa 11 — Schedule e Job Schedule</a></li>
+        <li><a href="#stage12">Etapa 12 — Azure Policy (DeployIfNotExists)</a></li>
+        <li><a href="#stage13">Etapa 13 — MDE Device Groups</a></li>
+        <li><a href="#stage14">Etapa 14 — MDE Machine Tags via API</a></li>
+        <li><a href="#validacao">Validação Completa</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#referencias">Referências e URLs do Portal</a></li>
+    </ol>
+</div>
+
+<!-- ============ VISÃO GERAL ============ -->
+<h2 id="visao-geral">1. Visão Geral da Solução</h2>
+
+<h3>❌ O Problema</h3>
+<p>Em ambientes com <strong>múltiplas subscriptions Azure</strong>, as VMs Windows aparecem no portal MDE como uma lista única, sem organização:</p>
+
+<div class="portal">
+    <div class="portal-header">🛡️ Microsoft Defender XDR — Device Inventory (SEM automação)</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Device Name</th><th>OS</th><th>Tags</th><th>Device Group</th></tr>
+            <tr><td>srv-prod-01</td><td>Windows Server 2022</td><td><span class="badge-warn">—</span></td><td><span class="badge-warn">Ungrouped</span></td></tr>
+            <tr><td>srv-dev-03</td><td>Windows Server 2019</td><td><span class="badge-warn">—</span></td><td><span class="badge-warn">Ungrouped</span></td></tr>
+            <tr><td>vm-staging-02</td><td>Windows 11</td><td><span class="badge-warn">—</span></td><td><span class="badge-warn">Ungrouped</span></td></tr>
+            <tr><td>sql-prod-01</td><td>Windows Server 2022</td><td><span class="badge-warn">—</span></td><td><span class="badge-warn">Ungrouped</span></td></tr>
+            <tr><td colspan="4" style="color: var(--text-dim); text-align: center;">... centenas de VMs misturadas sem organização</td></tr>
+        </table>
+    </div>
+</div>
+
+<h3>✅ A Solução</h3>
+
+<div class="portal">
+    <div class="portal-header">🛡️ Microsoft Defender XDR — Device Inventory (COM MDE Policy Automation)</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Device Name</th><th>OS</th><th>Tags</th><th>Device Group</th></tr>
+            <tr><td>srv-prod-01</td><td>Windows Server 2022</td><td><span class="badge-ok">🏷️ mde-policy-production</span></td><td><span class="badge-ok">mde-policy-production</span></td></tr>
+            <tr><td>sql-prod-01</td><td>Windows Server 2022</td><td><span class="badge-ok">🏷️ mde-policy-production</span></td><td><span class="badge-ok">mde-policy-production</span></td></tr>
+            <tr><td>srv-dev-03</td><td>Windows Server 2019</td><td><span class="badge-ok">🏷️ mde-policy-development</span></td><td><span class="badge-ok">mde-policy-development</span></td></tr>
+            <tr><td>vm-staging-02</td><td>Windows 11</td><td><span class="badge-ok">🏷️ mde-policy-staging</span></td><td><span class="badge-ok">mde-policy-staging</span></td></tr>
+        </table>
+    </div>
+</div>
+
+<h3>🏗️ Arquitetura em 3 Camadas</h3>
+
+<div class="layer">
+    <div class="layer-title l1">🔵 CAMADA 1 — Azure Policy (Infraestrutura)</div>
+    <p>Azure Policy <strong>DeployIfNotExists</strong> detecta VMs Windows sem a extensão <code>MDEDeviceTagExtension</code> e automaticamente deploya o script <code>Set-MDEDeviceTag.ps1</code> que configura o registro Windows com o tag da subscription.</p>
+    <div class="registry">
+        <span class="path">HKLM:\SOFTWARE\Policies\Microsoft\</span><br>
+        <span class="path">&nbsp;&nbsp;Windows Advanced Threat Protection\DeviceTagging</span><br>
+        <span class="key">&nbsp;&nbsp;&nbsp;&nbsp;Group</span> = <span class="value">"mde-policy-{subscription-name}"</span>
+    </div>
+</div>
+
+<div class="layer">
+    <div class="layer-title l2">🟡 CAMADA 2 — Azure Automation (Operacional)</div>
+    <p>Automation Account com <strong>Managed Identity</strong> executa um Runbook PowerShell a cada hora que:</p>
+    <ul>
+        <li>Descobre todas as VMs Azure + Azure Arc machines na subscription</li>
+        <li>Busca os devices correspondentes no Entra ID via Graph API</li>
+        <li>Adiciona os devices encontrados ao Security Group do Entra ID</li>
+    </ul>
+</div>
+
+<div class="layer">
+    <div class="layer-title l3">🔴 CAMADA 3 — MDE Integration (Segurança)</div>
+    <p><strong>MDE Device Groups</strong> são configurados para filtrar devices pela tag. Cada subscription tem um Device Group específico, permitindo políticas AV/ASR diferenciadas por ambiente (PROD, DEV, TEST).</p>
+</div>
+
+<!-- ============ 14 STAGES TABLE ============ -->
+<h3>⚡ As 14 Etapas do Pipeline</h3>
+
+<table class="stage-table">
+    <tr><th>Stage</th><th>O Que Acontece</th><th>Recurso Azure</th></tr>
+    <tr><td>1</td><td>🔐 Autenticação e seleção de subscription</td><td>Azure CLI context</td></tr>
+    <tr><td>2</td><td>🏷️ Nomenclatura inteligente baseada na subscription</td><td>Convenção: <code>rg-mde-{sub}</code></td></tr>
+    <tr><td>3</td><td>📦 Resource Group com 8 tags corporativas</td><td><code>Microsoft.Resources/resourceGroups</code></td></tr>
+    <tr><td>4</td><td>👥 Entra ID Security Group</td><td>Microsoft Graph API</td></tr>
+    <tr><td>5</td><td>⚙️ Automation Account provisioning</td><td><code>Microsoft.Automation/automationAccounts</code></td></tr>
+    <tr><td>6</td><td>🔑 Managed Identity (Zero Trust)</td><td><code>SystemAssigned</code> identity</td></tr>
+    <tr><td>7</td><td>🛡️ RBAC Reader role assignment</td><td>Subscription-scoped Reader</td></tr>
+    <tr><td>8</td><td>📡 Graph API permissions</td><td><code>Group.ReadWrite.All</code> + <code>Device.Read.All</code></td></tr>
+    <tr><td>9</td><td>📚 Módulo Az.Accounts</td><td>PowerShell Gallery → Automation</td></tr>
+    <tr><td>10</td><td>📜 Runbook criação e publicação</td><td>VM ↔ Entra ID sync logic</td></tr>
+    <tr><td>11</td><td>⏰ Schedule + Job Schedule linking</td><td>Execução a cada hora</td></tr>
+    <tr><td>12</td><td>📋 Azure Policy para VM tagging</td><td><code>DeployIfNotExists</code> policy</td></tr>
+    <tr><td>13</td><td>🖥️ MDE Device Group instructions</td><td>HTML guide auto-gerado</td></tr>
+    <tr><td>14</td><td>🏷️ MDE Machine Tags via API</td><td>App Registration + OAuth2</td></tr>
+</table>
+
+<!-- ============ PRÉ-REQUISITOS ============ -->
+<div class="page-break"></div>
+<h2 id="pre-requisitos">2. Pré-Requisitos</h2>
+
+<h3>Software Necessário</h3>
+<table class="stage-table">
+    <tr><th>Requisito</th><th>Como Verificar</th><th>Onde Baixar</th></tr>
+    <tr><td><strong>Azure CLI 2.0+</strong></td><td><code>az version</code></td><td><a href="https://aka.ms/installazurecli">aka.ms/installazurecli</a></td></tr>
+    <tr><td><strong>PowerShell 5.1+</strong></td><td><code>$PSVersionTable.PSVersion</code></td><td>Incluso no Windows 10/11</td></tr>
+    <tr><td><strong>Git</strong></td><td><code>git --version</code></td><td><a href="https://git-scm.com">git-scm.com</a></td></tr>
+</table>
+
+<h3>Permissões Azure</h3>
+<table class="stage-table">
+    <tr><th>Permissão</th><th>Onde É Usada</th><th>Como Verificar</th></tr>
+    <tr><td><strong>Contributor</strong></td><td>Criar RG, Automation Account, Policy</td><td>Subscription → IAM</td></tr>
+    <tr><td><strong>Policy Contributor</strong></td><td>Criar e atribuir Azure Policy</td><td>Subscription → IAM</td></tr>
+    <tr><td><strong>User Access Administrator</strong></td><td>Atribuir RBAC para Managed Identity</td><td>Subscription → IAM</td></tr>
+    <tr><td><strong>Global Admin</strong></td><td>Graph API app permissions</td><td>Entra Admin Center → Roles</td></tr>
+</table>
+
+<div class="terminal">
+    <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">PowerShell — Verificação de Pré-Requisitos</span>
+    </div>
+    <div class="terminal-body"><span class="prompt">PS C:\&gt;</span> az version
+{
+  "azure-cli": "2.68.0",
+  "azure-cli-core": "2.68.0"
+}
+
+<span class="prompt">PS C:\&gt;</span> $PSVersionTable.PSVersion
+Major  Minor  Patch
+-----  -----  -----
+7      4      6
+
+<span class="prompt">PS C:\&gt;</span> az account show --query "{user:user.name, tenant:tenantId, sub:name}" -o table
+User                                    Tenant                                Subscription
+--------------------------------------  ------------------------------------  -------------------------
+<span class="ok">admin@contoso.onmicrosoft.com</span>            9217e954-8efe-4920-ae1b-700c507c9faa  <span class="ok">Production-Subscription</span></div>
+</div>
+
+<!-- ============ STAGE 1 ============ -->
+<div class="page-break"></div>
+<h2 id="stage1">3. Etapa 1 — Autenticação e Seleção de Subscription</h2>
+
+<h3>O Que Acontece</h3>
+<p>O script verifica se o Azure CLI está autenticado e lista todas as subscriptions disponíveis para o usuário selecionar qual deseja configurar.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header">
+        <div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div>
+        <span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 1/14</span>
+    </div>
+    <div class="terminal-body"><span class="accent">============================================================</span>
+  MICROSOFT DEFENDER FOR ENDPOINT
+  Deployment Completo - 14 Stages - AUTOMACAO TOTAL
+  v1.0.4 - Full Automation Edition
+<span class="accent">============================================================</span>
+
+<span class="info">[1/14] AUTENTICACAO E SUBSCRICAO</span>
+<span class="info">========================================================</span>
+
+  <span class="ok">[OK] Autenticado: admin@contoso.onmicrosoft.com</span>
+
+  <span class="warn">Subscriptions disponiveis:</span>
+  [1] ME-MngEnvMCAP186458-rafaelluizf-1
+  [2] Development-Subscription
+  [3] Staging-Subscription
+
+  <span class="info">Selecione (1-3):</span> 1
+  <span class="ok">[OK] Subscription: ME-MngEnvMCAP186458-rafaelluizf-1</span></div>
+</div>
+
+<h3>📸 No Portal Azure — Subscriptions</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Subscriptions</div>
+    <div class="portal-breadcrumb">🏠 Home &gt; Subscriptions</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Name</th><th>Status</th><th>Subscription ID</th></tr>
+            <tr><td>ME-MngEnvMCAP186458-rafaelluizf-1</td><td><span class="badge-ok">✅ Active</span></td><td>fbb41bf3-dc95-4c71-8e14-396d3ed38b91</td></tr>
+        </table>
+        <div class="info-box tip">
+            <strong>💡 URL direta:</strong> <a href="https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade" style="color: var(--info);">portal.azure.com → Subscriptions</a>
+        </div>
+    </div>
+</div>
+
+<!-- ============ STAGE 2 ============ -->
+<h2 id="stage2">4. Etapa 2 — Nomenclatura Inteligente</h2>
+
+<h3>O Que Acontece</h3>
+<p>O nome da subscription é <strong>sanitizado e padronizado</strong> para gerar nomes únicos e consistentes para todos os recursos Azure que serão criados.</p>
+
+<h3>Lógica de Geração</h3>
+<div class="terminal">
+    <div class="terminal-header">
+        <div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div>
+        <span class="terminal-title">PowerShell — Lógica de Nomenclatura</span>
+    </div>
+    <div class="terminal-body"><span class="dim"># Subscription: "ME-MngEnvMCAP186458-rafaelluizf-1"</span>
+
+<span class="info">$subNameClean</span> = $subscriptionName <span class="accent">-replace</span> '[^a-zA-Z0-9-]', '-'  <span class="dim"># Remove caracteres especiais</span>
+                                     <span class="accent">-replace</span> '--+', '-'          <span class="dim"># Remove hífens duplicados</span>
+                                     <span class="accent">-replace</span> '^-|-$', ''         <span class="dim"># Remove hífens nas pontas</span>
+
+<span class="info">$subNameShort</span> = $subNameClean.Substring(0, 40).ToLower()  <span class="dim"># Trunca em 40 chars</span>
+
+<span class="dim"># Resultado: "me-mngenvmcap186458-rafaelluizf-1"</span></div>
+</div>
+
+<h3>Tabela de Recursos Gerados</h3>
+<table class="stage-table">
+    <tr><th>Recurso</th><th>Padrão</th><th>Valor Gerado</th></tr>
+    <tr><td>Resource Group</td><td><code>rg-mde-{sub}</code></td><td><code>rg-mde-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+    <tr><td>Automation Account</td><td><code>aa-mde-{sub}</code></td><td><code>aa-mde-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+    <tr><td>Entra ID Group</td><td><code>grp-mde-{sub}</code></td><td><code>grp-mde-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+    <tr><td><strong>MDE Tag Value</strong></td><td><code>mde-policy-{sub}</code></td><td><code><strong>mde-policy-me-mngenvmcap186458-rafaelluizf-1</strong></code></td></tr>
+    <tr><td>Runbook</td><td><code>rb-mde-sync-{sub}</code></td><td><code>rb-mde-sync-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+    <tr><td>Schedule</td><td><code>sch-mde-{sub}</code></td><td><code>sch-mde-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+    <tr><td>Azure Policy</td><td><code>pol-mde-tag-{sub}</code></td><td><code>pol-mde-tag-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+</table>
+
+<div class="info-box important">
+    <strong>⚠️ CRÍTICO:</strong> O <strong>TagValue</strong> (<code>mde-policy-{sub}</code>) é a chave que conecta todo o pipeline. Ele é escrito no registro Windows pela Azure Policy, lido pelo MDE Agent, e usado como filtro no MDE Device Group. Todos devem ter o mesmo valor.
+</div>
+
+<!-- ============ STAGE 3 — RESOURCE GROUP ============ -->
+<div class="page-break"></div>
+<h2 id="stage3">5. Etapa 3 — Resource Group</h2>
+
+<h3>O Que Acontece</h3>
+<p>Cria um Resource Group dedicado para os recursos da automação MDE, com <strong>8 tags corporativas</strong> para rastreabilidade e governança.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 3/14</span></div>
+    <div class="terminal-body"><span class="info">[3/14] RESOURCE GROUP</span>
+<span class="info">========================================================</span>
+
+  <span class="ok">[OK] Resource Group criado: rg-mde-me-mngenvmcap186458-rafaelluizf-1</span>
+  <span class="ok">[OK] Localização: eastus2</span>
+  <span class="ok">[OK] 8 tags aplicadas</span></div>
+</div>
+
+<h3>📸 No Portal — Resource Group com Tags</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Resource Groups</div>
+    <div class="portal-breadcrumb">🏠 Home &gt; Resource groups &gt; rg-mde-me-mngenvmcap186458-rafaelluizf-1 &gt; Tags</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Tag Name</th><th>Value</th></tr>
+            <tr><td>Project</td><td>MDE-PolicyAutomation</td></tr>
+            <tr><td>Purpose</td><td>MDE Device Tag Management</td></tr>
+            <tr><td>ManagedBy</td><td>Deploy-MDE-Automation</td></tr>
+            <tr><td>Subscription</td><td>me-mngenvmcap186458-rafaelluizf-1</td></tr>
+            <tr><td>CreatedDate</td><td>2026-03-01</td></tr>
+            <tr><td>Version</td><td>1.0.4</td></tr>
+            <tr><td>AutomationType</td><td>PolicyDriven</td></tr>
+            <tr><td>SecurityLevel</td><td>Production</td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="info-box tip">
+    <strong>💡 URL direta:</strong> <a href="https://portal.azure.com/#view/HubsExtension/BrowseResourceGroups" style="color: var(--info);">portal.azure.com → Resource Groups</a>
+</div>
+
+<!-- ============ STAGE 4 — ENTRA ID GROUP ============ -->
+<h2 id="stage4">6. Etapa 4 — Grupo Entra ID (Security Group)</h2>
+
+<h3>O Que Acontece</h3>
+<p>Cria um Security Group no Entra ID (Azure AD) para agrupar os device objects das VMs da subscription. O Runbook (Etapa 10) populará este grupo automaticamente.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 4/14</span></div>
+    <div class="terminal-body"><span class="info">[4/14] ENTRA ID GROUP</span>
+<span class="info">========================================================</span>
+
+  <span class="dim">Verificando grupo existente...</span>
+  <span class="ok">[OK] Grupo criado: MDE-ME-MngEnvMCAP186458-rafaelluizf-1</span>
+  <span class="ok">[OK] Object ID: c6e6bfee-9e19-4495-97b0-0d5a6ca30e45</span>
+  <span class="ok">[OK] Tipo: Security (Cloud)</span></div>
+</div>
+
+<h3>📸 No Portal — Entra Admin Center</h3>
+<div class="portal">
+    <div class="portal-header">🔐 Microsoft Entra admin center — Groups</div>
+    <div class="portal-breadcrumb">🏠 Groups &gt; All groups &gt; 🔍 "MDE-"</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Display Name</th><th>Type</th><th>Source</th><th>Members</th></tr>
+            <tr><td><strong>MDE-ME-MngEnvMCAP186458-rafaelluizf-1</strong></td><td>Security</td><td>Cloud</td><td><span class="badge-ok">8 devices</span></td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="info-box note">
+    <strong>ℹ️ Como funciona:</strong> O grupo começa <strong>vazio</strong> após a criação. Ele será populado automaticamente pelo Runbook (Etapa 10) a cada hora, sincronizando VMs Azure/Arc com devices no Entra ID.
+</div>
+
+<!-- ============ STAGE 5 — AUTOMATION ACCOUNT ============ -->
+<div class="page-break"></div>
+<h2 id="stage5">7. Etapa 5 — Automation Account</h2>
+
+<h3>O Que Acontece</h3>
+<p>Provisiona um Azure Automation Account que servirá como o <strong>"motor operacional"</strong> — executando o Runbook PowerShell que sincroniza VMs com o Entra ID Group.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 5/14</span></div>
+    <div class="terminal-body"><span class="info">[5/14] AUTOMATION ACCOUNT</span>
+<span class="info">========================================================</span>
+
+  <span class="dim">Criando Automation Account...</span>
+  <span class="ok">[OK] Automation Account: aa-mde-me-mngenvmcap186458-rafaelluizf-1</span>
+  <span class="ok">[OK] SKU: Basic</span>
+  <span class="ok">[OK] Localização: eastus2</span></div>
+</div>
+
+<h3>📸 No Portal — Automation Account</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Automation Accounts</div>
+    <div class="portal-breadcrumb">🏠 Automation Accounts &gt; aa-mde-me-mngenvmcap186458-rafaelluizf-1 &gt; Overview</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Property</th><th>Value</th></tr>
+            <tr><td>Name</td><td><strong>aa-mde-me-mngenvmcap186458-rafaelluizf-1</strong></td></tr>
+            <tr><td>Resource group</td><td>rg-mde-me-mngenvmcap186458-rafaelluizf-1</td></tr>
+            <tr><td>Location</td><td>East US 2</td></tr>
+            <tr><td>Subscription</td><td>ME-MngEnvMCAP186458-rafaelluizf-1</td></tr>
+            <tr><td>Identity</td><td><span class="badge-ok">✅ System assigned</span></td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- ============ STAGE 6 — MANAGED IDENTITY ============ -->
+<h2 id="stage6">8. Etapa 6 — Managed Identity (Zero Trust)</h2>
+
+<h3>O Que Acontece</h3>
+<p>Ativa a <strong>System Assigned Managed Identity</strong> no Automation Account. Esta identidade é o <strong>pilar Zero Trust</strong> — permite que o Runbook acesse Azure e Graph API <strong>sem armazenar credenciais</strong>.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 6/14</span></div>
+    <div class="terminal-body"><span class="info">[6/14] MANAGED IDENTITY</span>
+<span class="info">========================================================</span>
+
+  <span class="ok">[OK] Managed Identity ativada (System Assigned)</span>
+  <span class="ok">[OK] Principal ID: df4baebf-4b2f-453d-b4f4-e4708db2aaed</span>
+  <span class="ok">[OK] Tenant ID: 9217e954-8efe-4920-ae1b-700c507c9faa</span></div>
+</div>
+
+<h3>📸 No Portal — Managed Identity</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Automation Account → Identity</div>
+    <div class="portal-breadcrumb">🏠 Automation Accounts &gt; aa-mde-... &gt; Identity &gt; System assigned</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Setting</th><th>Value</th></tr>
+            <tr><td>Status</td><td><span class="badge-ok">✅ On</span></td></tr>
+            <tr><td>Object (principal) ID</td><td>df4baebf-4b2f-453d-b4f4-e4708db2aaed</td></tr>
+        </table>
+        <div class="info-box tip">
+            <strong>🔐 Zero Trust:</strong> Managed Identity elimina a necessidade de armazenar <strong>senhas, chaves de API ou certificados</strong>. A autenticação é gerenciada pelo Azure AD automaticamente.
+        </div>
+    </div>
+</div>
+
+<!-- ============ STAGE 7 — RBAC READER ============ -->
+<h2 id="stage7">9. Etapa 7 — RBAC Reader</h2>
+
+<h3>O Que Acontece</h3>
+<p>Atribui a role <strong>Reader</strong> à Managed Identity no nível da <strong>subscription</strong>. Isso permite que o Runbook liste todas as VMs e Azure Arc machines.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 7/14</span></div>
+    <div class="terminal-body"><span class="info">[7/14] RBAC READER</span>
+<span class="info">========================================================</span>
+
+  <span class="ok">[OK] Role 'Reader' atribuida à Managed Identity</span>
+  <span class="ok">[OK] Scope: /subscriptions/fbb41bf3-dc95-4c71-8e14-396d3ed38b91</span></div>
+</div>
+
+<h3>📸 No Portal — IAM Role Assignment</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Subscription → Access Control (IAM)</div>
+    <div class="portal-breadcrumb">🏠 Subscriptions &gt; ME-MngEnv... &gt; Access control (IAM) &gt; Role assignments</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Name</th><th>Type</th><th>Role</th><th>Scope</th></tr>
+            <tr><td>aa-mde-me-mngenvmcap186458-rafaelluizf-1</td><td>Managed Identity</td><td><span class="badge-ok">Reader</span></td><td>Subscription</td></tr>
+        </table>
+        <div class="info-box note">
+            <strong>ℹ️ Princípio Least Privilege:</strong> Reader é a <strong>menor permissão possível</strong> para listar recursos. Não permite criar, modificar ou deletar nenhum recurso Azure.
+        </div>
+    </div>
+</div>
+
+<!-- ============ STAGE 8 — GRAPH API PERMISSIONS ============ -->
+<div class="page-break"></div>
+<h2 id="stage8">10. Etapa 8 — Permissões Graph API</h2>
+
+<h3>O Que Acontece</h3>
+<p>Concede à Managed Identity as permissões no <strong>Microsoft Graph API</strong> necessárias para gerenciar o grupo Entra ID:</p>
+<ul>
+    <li><strong>Group.ReadWrite.All</strong> — ler e adicionar membros ao grupo</li>
+    <li><strong>Device.Read.All</strong> — buscar devices (VMs) registrados no Entra ID</li>
+</ul>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 8/14</span></div>
+    <div class="terminal-body"><span class="info">[8/14] GRAPH API PERMISSIONS</span>
+<span class="info">========================================================</span>
+
+  <span class="dim">Buscando Service Principal do Microsoft Graph...</span>
+  <span class="ok">[OK] Graph SP encontrado</span>
+
+  <span class="dim">Concedendo Group.ReadWrite.All...</span>
+  <span class="ok">[OK] Group.ReadWrite.All concedida</span>
+
+  <span class="dim">Concedendo Device.Read.All...</span>
+  <span class="ok">[OK] Device.Read.All concedida</span>
+
+  <span class="warn">[INFO] Requer consent de Global Administrator</span></div>
+</div>
+
+<h3>📸 No Portal — Enterprise Applications → API Permissions</h3>
+<div class="portal">
+    <div class="portal-header">🔐 Entra Admin Center — Enterprise Applications → Permissions</div>
+    <div class="portal-breadcrumb">🏠 Enterprise applications &gt; aa-mde-... &gt; Permissions</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>API</th><th>Permission</th><th>Type</th><th>Status</th></tr>
+            <tr><td>Microsoft Graph</td><td><strong>Group.ReadWrite.All</strong></td><td>Application</td><td><span class="badge-ok">✅ Granted</span></td></tr>
+            <tr><td>Microsoft Graph</td><td><strong>Device.Read.All</strong></td><td>Application</td><td><span class="badge-ok">✅ Granted</span></td></tr>
+        </table>
+        <div class="info-box warning">
+            <strong>⚠️ Admin Consent:</strong> As permissões <code>Application</code> requerem consentimento de um <strong>Global Administrator</strong>. O script tenta conceder automaticamente, mas pode ser necessário consentir manualmente no portal.
+        </div>
+    </div>
+</div>
+
+<div class="info-box tip">
+    <strong>💡 URL direta:</strong> <a href="https://entra.microsoft.com/#view/Microsoft_AAD_IAM/StartboardApplicationsMenuBlade/~/AppAppsPreview" style="color: var(--info);">entra.microsoft.com → Enterprise applications</a>
+</div>
+
+<!-- ============ STAGE 9 — AZ.ACCOUNTS MODULE ============ -->
+<h2 id="stage9">11. Etapa 9 — Módulo Az.Accounts</h2>
+
+<h3>O Que Acontece</h3>
+<p>Importa o módulo <strong>Az.Accounts</strong> da PowerShell Gallery para o Automation Account. Este módulo é necessário para que o Runbook se autentique via Managed Identity.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 9/14</span></div>
+    <div class="terminal-body"><span class="info">[9/14] MODULO AZ.ACCOUNTS</span>
+<span class="info">========================================================</span>
+
+  <span class="dim">Verificando módulo Az.Accounts no Automation Account...</span>
+  <span class="dim">Importando da PowerShell Gallery...</span>
+  <span class="ok">[OK] Az.Accounts importado com sucesso</span>
+  <span class="ok">[OK] Versão: 3.0.5</span>
+  <span class="ok">[OK] Status: Available</span></div>
+</div>
+
+<h3>📸 No Portal — Automation Account → Modules</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Automation Account → Modules</div>
+    <div class="portal-breadcrumb">🏠 Automation Accounts &gt; aa-mde-... &gt; Shared Resources &gt; Modules</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Module Name</th><th>Version</th><th>Status</th><th>Source</th></tr>
+            <tr><td><strong>Az.Accounts</strong></td><td>3.0.5</td><td><span class="badge-ok">✅ Available</span></td><td>PowerShell Gallery</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- ============ STAGE 10 — RUNBOOK ============ -->
+<div class="page-break"></div>
+<h2 id="stage10">12. Etapa 10 — Runbook PowerShell</h2>
+
+<h3>O Que Acontece</h3>
+<p>Cria, importa e publica um <strong>Runbook PowerShell</strong> que executa a lógica de sincronização:</p>
+<ol>
+    <li>Autentica via Managed Identity (<code>Connect-AzAccount -Identity</code>)</li>
+    <li>Lista todas as VMs + Azure Arc machines na subscription</li>
+    <li>Para cada VM, busca o device correspondente no Entra ID (por nome)</li>
+    <li>Adiciona os devices encontrados ao Security Group</li>
+</ol>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 10/14</span></div>
+    <div class="terminal-body"><span class="info">[10/14] RUNBOOK</span>
+<span class="info">========================================================</span>
+
+  <span class="dim">Criando Runbook inline (PowerShell 5.1)...</span>
+  <span class="ok">[OK] Runbook criado: rb-mde-sync-me-mngenvmcap186458-rafaelluizf-1</span>
+  <span class="ok">[OK] Tipo: PowerShell</span>
+  <span class="ok">[OK] Status: Published</span></div>
+</div>
+
+<h3>📸 No Portal — Runbook</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Automation Account → Runbooks</div>
+    <div class="portal-breadcrumb">🏠 Automation Accounts &gt; aa-mde-... &gt; Process Automation &gt; Runbooks</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Name</th><th>Type</th><th>Status</th><th>Last Modified</th></tr>
+            <tr><td><strong>rb-mde-sync-me-mngenvmcap186458-rafaelluizf-1</strong></td><td>PowerShell</td><td><span class="badge-ok">✅ Published</span></td><td>2026-03-01</td></tr>
+        </table>
+
+        <h4 style="margin-top: 20px;">Lógica do Runbook (simplificada):</h4>
+        <div class="terminal">
+            <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Runbook — Fluxo Lógico</span></div>
+            <div class="terminal-body"><span class="accent">1.</span> <span class="info">Connect-AzAccount -Identity</span>        <span class="dim"># Auth via Managed Identity</span>
+<span class="accent">2.</span> <span class="info">Get-AzVM</span>                               <span class="dim"># Lista VMs Azure</span>
+<span class="accent">3.</span> <span class="info">Get-AzConnectedMachine</span>                 <span class="dim"># Lista Azure Arc machines</span>
+<span class="accent">4.</span> <span class="info">GET graph.../devices?$filter=...</span>      <span class="dim"># Busca device Entra ID por nome</span>
+<span class="accent">5.</span> <span class="info">POST graph.../groups/{id}/members/$ref</span> <span class="dim"># Adiciona device ao grupo</span>
+<span class="accent">6.</span> <span class="dim">Loop para cada VM/Arc → repete 4-5</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ STAGE 11 — SCHEDULE ============ -->
+<h2 id="stage11">13. Etapa 11 — Schedule e Job Schedule</h2>
+
+<h3>O Que Acontece</h3>
+<p>Cria um <strong>Schedule</strong> com frequência horária e o vincula ao Runbook via <strong>Job Schedule</strong>. A partir deste momento, a sincronização VM↔Entra ID ocorre <strong>automaticamente a cada hora</strong>.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 11/14</span></div>
+    <div class="terminal-body"><span class="info">[11/14] SCHEDULE + JOB SCHEDULE</span>
+<span class="info">========================================================</span>
+
+  <span class="ok">[OK] Schedule criado: sch-mde-me-mngenvmcap186458-rafaelluizf-1</span>
+  <span class="ok">[OK] Frequência: Hourly (1 hora)</span>
+  <span class="ok">[OK] Start Time: 2026-03-01T12:00:00Z</span>
+  <span class="ok">[OK] Timezone: UTC</span>
+  <span class="ok">[OK] Job Schedule vinculado ao Runbook</span></div>
+</div>
+
+<h3>📸 No Portal — Schedule</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Automation Account → Schedules</div>
+    <div class="portal-breadcrumb">🏠 Automation Accounts &gt; aa-mde-... &gt; Shared Resources &gt; Schedules</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Name</th><th>Frequency</th><th>Status</th><th>Next Run (UTC)</th></tr>
+            <tr><td><strong>sch-mde-me-mngenvmcap186458-rafaelluizf-1</strong></td><td>Every 1 hour</td><td><span class="badge-ok">✅ Enabled</span></td><td>2026-03-01 13:00</td></tr>
+        </table>
+    </div>
+</div>
+
+<h3>📸 No Portal — Jobs (Histórico de Execuções)</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Automation Account → Jobs</div>
+    <div class="portal-breadcrumb">🏠 Automation Accounts &gt; aa-mde-... &gt; Process Automation &gt; Jobs</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Runbook</th><th>Status</th><th>Start Time</th><th>Duration</th></tr>
+            <tr><td>rb-mde-sync-...</td><td><span class="badge-ok">✅ Completed</span></td><td>2026-03-01 12:00</td><td>45s</td></tr>
+            <tr><td>rb-mde-sync-...</td><td><span class="badge-ok">✅ Completed</span></td><td>2026-03-01 11:00</td><td>42s</td></tr>
+            <tr><td>rb-mde-sync-...</td><td><span class="badge-ok">✅ Completed</span></td><td>2026-03-01 10:00</td><td>48s</td></tr>
+        </table>
+        <div class="info-box tip">
+            <strong>💡 Dica:</strong> Clique em qualquer job para ver o <strong>Output</strong> detalhado: quantas VMs foram encontradas, quantos devices adicionados ao grupo, erros (se houver).
+        </div>
+    </div>
+</div>
+
+<!-- ============ STAGE 12 — AZURE POLICY (mais importante) ============ -->
+<div class="page-break"></div>
+<h2 id="stage12">14. Etapa 12 — Azure Policy (DeployIfNotExists)</h2>
+
+<h3>O Que Acontece</h3>
+<p>Esta é a <strong>etapa mais importante</strong> para a automação de tags. Cria uma Azure Policy do tipo <code>DeployIfNotExists</code> que automaticamente configura o registry de cada VM Windows com o tag da subscription.</p>
+
+<h3>📸 Fluxo da Azure Policy</h3>
+
+<div class="flow">
+    <div class="flow-step"><div class="num">1</div><div class="desc">VM Windows<br>criada no Azure</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">2</div><div class="desc">Azure Policy<br>avalia (15-30 min)</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">3</div><div class="desc">Non-Compliant?<br>DeployIfNotExists</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">4</div><div class="desc">Custom Script<br>Extension deploy</div></div>
+</div>
+<div class="flow">
+    <div class="flow-step"><div class="num">5</div><div class="desc">Set-MDEDeviceTag.ps1<br>executa na VM</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">6</div><div class="desc">Registry<br>configurado</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">7</div><div class="desc">MDE Sense Agent<br>lê o registry</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">8</div><div class="desc">Tag aparece<br>no MDE Portal! 🎉</div></div>
+</div>
+
+<h3>📸 No Portal — Policy Definitions</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Policy → Definitions</div>
+    <div class="portal-breadcrumb">🏠 Policy &gt; Definitions &gt; 🔍 "mde-device-tag"</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Name</th><th>Type</th><th>Mode</th><th>Effect</th></tr>
+            <tr><td><strong>Deploy MDE Device Tag to Windows Virtual Machines</strong><br><span style="color: var(--text-dim); font-size: 0.8em;">mde-device-tag-windows-vms</span></td><td>Custom</td><td>Indexed</td><td>DeployIfNotExists</td></tr>
+        </table>
+        <h4 style="margin-top: 20px;">📋 Policy Rule (resumo):</h4>
+        <div class="terminal">
+            <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">policy-definition.json</span></div>
+            <div class="terminal-body"><span class="accent">IF:</span>
+  type == <span class="ok">"Microsoft.Compute/virtualMachines"</span>
+  AND osType == <span class="ok">"Windows"</span>
+
+<span class="accent">THEN (DeployIfNotExists):</span>
+  → Cria sub-resource: <span class="info">CustomScriptExtension</span>
+  → Nome: <span class="info">MDEDeviceTagExtension</span>
+  → Script: <span class="info">Set-MDEDeviceTag.ps1</span>
+  → Args: <span class="warn">-TagValue "mde-policy-{sub}"</span>
+
+<span class="accent">Parameters:</span>
+  <span class="info">tagValue</span>:  string (required) — valor do tag MDE
+  <span class="info">scriptUri</span>: string (required) — URL do script no GitHub/Storage
+  <span class="info">effect</span>:    string (default: DeployIfNotExists)</div>
+        </div>
+    </div>
+</div>
+
+<div class="info-box tip">
+    <strong>💡 URL direta:</strong> <a href="https://portal.azure.com/#view/Microsoft_Azure_Policy/PolicyMenuBlade/~/Definitions" style="color: var(--info);">portal.azure.com → Policy → Definitions</a>
+</div>
+
+<h3>📸 No Portal — Policy Compliance</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — Policy → Compliance</div>
+    <div class="portal-breadcrumb">🏠 Policy &gt; Compliance</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Assignment Name</th><th>Compliance</th><th>Non-Compliant Resources</th></tr>
+            <tr><td><strong>MDE Device Tag | SecurityLab</strong><br><span style="color: var(--text-dim); font-size: 0.8em;">mde-tag-securitylab</span></td><td><span class="badge-ok">✅ Compliant</span></td><td>0</td></tr>
+        </table>
+        <h4>Resource Compliance:</h4>
+        <table class="portal-table">
+            <tr><th>Resource</th><th>Compliance State</th><th>Last Evaluated</th></tr>
+            <tr><td>lab-agencia4</td><td><span class="badge-ok">✅ Compliant</span></td><td>2026-03-01</td></tr>
+            <tr><td>lab-mde-policy-tag-mng</td><td><span class="badge-ok">✅ Compliant</span></td><td>2026-03-01</td></tr>
+        </table>
+    </div>
+</div>
+
+<h3>📸 No Portal — VM Extensions</h3>
+<div class="portal">
+    <div class="portal-header">☁️ Azure Portal — VM → Extensions + applications</div>
+    <div class="portal-breadcrumb">🏠 Virtual machines &gt; lab-agencia4 &gt; Extensions + applications</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Name</th><th>Publisher</th><th>Type</th><th>Status</th></tr>
+            <tr><td><strong>MDEDeviceTagExtension</strong></td><td>Microsoft.Compute</td><td>CustomScriptExtension</td><td><span class="badge-ok">✅ Provisioning succeeded</span></td></tr>
+            <tr><td>AzurePolicyForWindows</td><td>Microsoft.GuestConfiguration</td><td>ConfigurationforWindows</td><td><span class="badge-ok">✅ Provisioning succeeded</span></td></tr>
+        </table>
+        <div class="info-box note">
+            <strong>ℹ️ Nota:</strong> A extensão <code>MDEDeviceTagExtension</code> foi criada <strong>automaticamente</strong> pela Azure Policy. Não é necessário instalar manualmente.
+        </div>
+    </div>
+</div>
+
+<h3>📸 Verificação do Registry na VM</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">PowerShell — Verificação Remota via az vm run-command</span></div>
+    <div class="terminal-body"><span class="prompt">PS C:\&gt;</span> az vm run-command invoke -g SecurityLab -n lab-agencia4 `
+    --command-id RunPowerShellScript `
+    --scripts "Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection\DeviceTagging'"
+
+<span class="ok">SENSE: Running</span>
+<span class="ok">TAG: mde-policy-me-mngenvmcap186458-rafaelluizf-1</span></div>
+</div>
+
+<div class="registry">
+    <strong>📸 Registry Editor (dentro da VM):</strong><br><br>
+    📁 Computer<br>
+    &nbsp;&nbsp;📁 HKEY_LOCAL_MACHINE<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;📁 SOFTWARE<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📁 Policies<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📁 Microsoft<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📁 Windows Advanced Threat Protection<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📁 <span class="path">DeviceTagging</span><br><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">Name</span>&nbsp;&nbsp;&nbsp;<span class="key">Type</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">Data</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Group&nbsp;&nbsp;REG_SZ&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="value">mde-policy-me-mngenvmcap186458-rafaelluizf-1</span>
+</div>
+
+<!-- ============ STAGE 13 — MDE DEVICE GROUPS ============ -->
+<div class="page-break"></div>
+<h2 id="stage13">15. Etapa 13 — MDE Device Groups</h2>
+
+<h3>O Que Acontece</h3>
+<p>O script gera um arquivo HTML com instruções detalhadas para criar o MDE Device Group no portal. Esta é a <strong>única etapa manual</strong> — a API do MDE não suporta criação programática de Device Groups.</p>
+
+<h3>📸 No Portal MDE — Criação do Device Group</h3>
+<div class="portal">
+    <div class="portal-header">🛡️ Microsoft Defender XDR — Settings → Endpoints → Device groups</div>
+    <div class="portal-breadcrumb">⚙️ Settings &gt; Endpoints &gt; Device groups &gt; + Add device group</div>
+    <div class="portal-body">
+        <h4>Step 1: General</h4>
+        <table class="portal-table">
+            <tr><th>Campo</th><th>Valor a Preencher</th></tr>
+            <tr><td><strong>Device group name</strong></td><td><code>mde-policy-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+            <tr><td><strong>Description</strong></td><td>Managed device group for subscription ME-MngEnvMCAP186458-rafaelluizf-1</td></tr>
+            <tr><td><strong>Automation level</strong></td><td>🔵 Full - remediate threats automatically</td></tr>
+        </table>
+
+        <h4 style="margin-top: 20px;">Step 2: Devices (Filtro)</h4>
+        <table class="portal-table">
+            <tr><th>Campo</th><th>Valor</th></tr>
+            <tr><td><strong>Filter by</strong></td><td>Tag</td></tr>
+            <tr><td><strong>Operator</strong></td><td>Equals</td></tr>
+            <tr><td><strong>Value</strong></td><td><code>mde-policy-me-mngenvmcap186458-rafaelluizf-1</code></td></tr>
+        </table>
+
+        <h4 style="margin-top: 20px;">Preview</h4>
+        <table class="portal-table">
+            <tr><th>Device Name</th><th>OS</th><th>Tag</th></tr>
+            <tr><td>LAB-AGENCIA4</td><td>Windows 10</td><td><span class="badge-ok">🏷️ mde-policy-me-mngenvmcap186458-rafaelluizf-1</span></td></tr>
+            <tr><td>LAB-MDE-POLICY-TAG-MNG</td><td>Windows 10</td><td><span class="badge-ok">🏷️ mde-policy-me-mngenvmcap186458-rafaelluizf-1</span></td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="info-box important">
+    <strong>⚠️ IMPORTANTE:</strong> O nome do Device Group (<code>mde-policy-{sub}</code>) deve corresponder <strong>exatamente</strong> ao valor da tag configurada no registry. Assim, todos os devices com essa tag serão automaticamente filtrados para o grupo.
+</div>
+
+<div class="info-box tip">
+    <strong>💡 URL direta:</strong> <a href="https://security.microsoft.com/securitysettings/endpoints/device_groups" style="color: var(--info);">security.microsoft.com → Settings → Endpoints → Device groups</a>
+</div>
+
+<!-- ============ MDE DEVICE INVENTORY ============ -->
+<h3>📸 No Portal MDE — Device Inventory com Tags</h3>
+<div class="portal">
+    <div class="portal-header">🛡️ Microsoft Defender XDR — Assets → Devices</div>
+    <div class="portal-breadcrumb">🏠 Assets &gt; Devices &gt; 🔍 Filter: Tag contains "mde-policy"</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>Device Name</th><th>OS</th><th>Tags</th><th>Device Group</th><th>MDE Onboarding</th></tr>
+            <tr>
+                <td><strong>LAB-AGENCIA4</strong></td>
+                <td>Windows 10</td>
+                <td><span class="badge-ok">🏷️ mde-policy-me-mngenvmcap186458-rafaelluizf-1</span></td>
+                <td>mde-policy-me-mngenvmcap186458-rafaelluizf-1</td>
+                <td><span class="badge-ok">✅ Active</span></td>
+            </tr>
+            <tr>
+                <td><strong>LAB-MDE-POLICY-TAG-MNG</strong></td>
+                <td>Windows 10</td>
+                <td><span class="badge-ok">🏷️ mde-policy-me-mngenvmcap186458-rafaelluizf-1</span></td>
+                <td>mde-policy-me-mngenvmcap186458-rafaelluizf-1</td>
+                <td><span class="badge-ok">✅ Active</span></td>
+            </tr>
+        </table>
+
+        <h4 style="margin-top: 20px;">Detalhe do Device — Tags Section:</h4>
+        <div style="background: #1a1a2e; border: 1px solid var(--azure-blue); border-radius: 6px; padding: 15px; margin-top: 10px;">
+            <strong style="color: var(--text-bright);">Tags:</strong><br>
+            <span style="background: rgba(0,255,136,0.15); color: var(--mde-green); padding: 4px 12px; border-radius: 4px; display: inline-block; margin-top: 8px; font-family: monospace;">
+                🏷️ mde-policy-me-mngenvmcap186458-rafaelluizf-1
+            </span><br>
+            <span style="color: var(--text-dim); font-size: 0.8em; margin-top: 8px; display: block;">
+                ℹ️ Tag definida via registro Windows (Azure Policy DeployIfNotExists)
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="info-box tip">
+    <strong>💡 URL direta:</strong> <a href="https://security.microsoft.com/machines" style="color: var(--info);">security.microsoft.com → Assets → Devices</a>
+</div>
+
+<!-- ============ STAGE 14 — MDE MACHINE TAGS VIA API ============ -->
+<div class="page-break"></div>
+<h2 id="stage14">16. Etapa 14 — MDE Machine Tags via API</h2>
+
+<h3>O Que Acontece</h3>
+<p>Configura uma <strong>App Registration</strong> no Entra ID com permissões <code>WindowsDefenderATP</code> para gerenciar Machine Tags via API. Isto permite operações avançadas como adicionar/remover tags programaticamente.</p>
+
+<h3>📸 Saída do Terminal</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">Deploy-MDE-Automation.ps1 — Stage 14/14</span></div>
+    <div class="terminal-body"><span class="info">[14/14] MDE MACHINE TAGS VIA API</span>
+<span class="info">========================================================</span>
+
+  <span class="dim">Criando App Registration...</span>
+  <span class="ok">[OK] App: MDE-TagManager-me-mngenvmcap186458</span>
+  <span class="ok">[OK] App ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span>
+
+  <span class="dim">Adicionando API permissions: WindowsDefenderATP...</span>
+  <span class="ok">[OK] Machine.ReadWrite.All concedida</span>
+  <span class="ok">[OK] Machine.Read.All concedida</span>
+
+  <span class="dim">Criando client secret...</span>
+  <span class="ok">[OK] Secret criado (expira em 1 ano)</span>
+  <span class="warn">[SALVE] Client Secret: xxxxxxxx~xxxxxxxxxxxxxxxxxxxxxxxxxxxx</span>
+
+<span class="accent">============================================================</span>
+<span class="ok">  ✅ DEPLOYMENT COMPLETO - 14/14 STAGES FINALIZADOS</span>
+<span class="accent">============================================================</span></div>
+</div>
+
+<h3>📸 No Portal — App Registration</h3>
+<div class="portal">
+    <div class="portal-header">🔐 Entra Admin Center — App registrations</div>
+    <div class="portal-breadcrumb">🏠 App registrations &gt; MDE-TagManager-me-mngenvmcap186458 &gt; API permissions</div>
+    <div class="portal-body">
+        <table class="portal-table">
+            <tr><th>API</th><th>Permission</th><th>Type</th><th>Status</th></tr>
+            <tr><td>WindowsDefenderATP</td><td><strong>Machine.ReadWrite.All</strong></td><td>Application</td><td><span class="badge-ok">✅ Granted</span></td></tr>
+            <tr><td>WindowsDefenderATP</td><td><strong>Machine.Read.All</strong></td><td>Application</td><td><span class="badge-ok">✅ Granted</span></td></tr>
+        </table>
+    </div>
+</div>
+
+<h3>📸 Como Usar a API MDE</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">PowerShell — Exemplo de uso da MDE API</span></div>
+    <div class="terminal-body"><span class="dim"># 1. Obter token OAuth2</span>
+<span class="prompt">PS C:\&gt;</span> $body = @{
+    client_id     = $appId
+    client_secret = $secret
+    scope         = "https://api.securitycenter.microsoft.com/.default"
+    grant_type    = "client_credentials"
+}
+<span class="prompt">PS C:\&gt;</span> $token = (Invoke-RestMethod -Method POST `
+    -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" `
+    -Body $body).access_token
+
+<span class="dim"># 2. Listar machines com tags</span>
+<span class="prompt">PS C:\&gt;</span> $headers = @{ Authorization = "Bearer $token" }
+<span class="prompt">PS C:\&gt;</span> Invoke-RestMethod `
+    -Uri "https://api.securitycenter.microsoft.com/api/machines" `
+    -Headers $headers | Select machineTags
+
+<span class="dim"># 3. Adicionar tag a um device</span>
+<span class="prompt">PS C:\&gt;</span> $body = @{ Value = "mde-policy-production"; Action = "Add" } | ConvertTo-Json
+<span class="prompt">PS C:\&gt;</span> Invoke-RestMethod -Method POST `
+    -Uri "https://api.securitycenter.microsoft.com/api/machines/{id}/tags" `
+    -Headers $headers -Body $body -ContentType "application/json"
+
+<span class="ok">[OK] Tag adicionada com sucesso</span></div>
+</div>
+
+<!-- ============ ENTRA ID GROUP DETAIL ============ -->
+<div class="page-break"></div>
+<h2 id="entra-group-detail">📸 Detalhe: Entra ID — Grupo e Membros (Referência Visual)</h2>
+
+<div class="portal">
+    <div class="portal-header">🔐 Microsoft Entra admin center — Groups</div>
+    <div class="portal-breadcrumb">🏠 Groups &gt; All groups &gt; MDE-ME-MngEnvMCAP186458-rafaelluizf-1 &gt; Members</div>
+    <div class="portal-body">
+        <h4>Group Details</h4>
+        <table class="portal-table">
+            <tr><th>Property</th><th>Value</th></tr>
+            <tr><td>Display Name</td><td><strong>MDE-ME-MngEnvMCAP186458-rafaelluizf-1</strong></td></tr>
+            <tr><td>Type</td><td>Security</td></tr>
+            <tr><td>Source</td><td>Cloud</td></tr>
+            <tr><td>Object ID</td><td>c6e6bfee-9e19-4495-97b0-0d5a6ca30e45</td></tr>
+        </table>
+
+        <h4 style="margin-top: 20px;">Members (8 devices)</h4>
+        <table class="portal-table">
+            <tr><th>Display Name</th><th>Object Type</th><th>OS</th></tr>
+            <tr><td><strong>LAB-AGENCIA4</strong></td><td>Device</td><td>Windows</td></tr>
+            <tr><td>SecLab-DC</td><td>Device</td><td>Windows</td></tr>
+            <tr><td>tagDEV</td><td>Device</td><td>Windows</td></tr>
+            <tr><td>sap-sentinel-agent</td><td>Device</td><td>Windows</td></tr>
+            <tr><td>vm-exposed-lab</td><td>Device</td><td>Windows</td></tr>
+            <tr><td>Sentinel4sa-Wi3</td><td>Device</td><td>Windows</td></tr>
+            <tr><td>sid-j2e</td><td>Device</td><td>Windows</td></tr>
+            <tr><td>ip-172-31-29-155...</td><td>Device</td><td>Windows</td></tr>
+        </table>
+
+        <div class="info-box note">
+            <strong>ℹ️ Preenchido automaticamente:</strong> O Runbook do Automation Account sincroniza VMs Azure com este grupo <strong>a cada hora</strong>. Não é necessário adicionar devices manualmente.
+        </div>
+    </div>
+</div>
+
+<div class="info-box tip">
+    <strong>💡 URL direta:</strong> <a href="https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/AllGroups" style="color: var(--info);">entra.microsoft.com → Groups → All groups</a>
+</div>
+
+<!-- ============ VALIDAÇÃO ============ -->
+<div class="page-break"></div>
+<h2 id="validacao">17. Validação Completa</h2>
+
+<h3>✅ Checklist de Verificação</h3>
+<ul class="checklist">
+    <li class="done">✅ <strong>1.</strong> Resource Group existe com 8 tags — <em>Portal → Resource Groups → rg-mde-{sub} → Tags</em></li>
+    <li class="done">✅ <strong>2.</strong> Entra ID Group existe — <em>Entra Admin Center → Groups → grp-mde-{sub}</em></li>
+    <li class="done">✅ <strong>3.</strong> Entra ID Group tem membros (devices) — <em>Group → Members</em></li>
+    <li class="done">✅ <strong>4.</strong> Automation Account com Managed Identity — <em>Portal → Automation Accounts → aa-mde-{sub} → Identity</em></li>
+    <li class="done">✅ <strong>5.</strong> Runbook Published — <em>Automation Accounts → Runbooks</em></li>
+    <li class="done">✅ <strong>6.</strong> Schedule Enabled (hourly) — <em>Automation Accounts → Schedules</em></li>
+    <li class="done">✅ <strong>7.</strong> Azure Policy Assigned — <em>Portal → Policy → Assignments</em></li>
+    <li class="done">✅ <strong>8.</strong> VMs com registry tag configurado — <em>az vm run-command invoke</em></li>
+    <li class="done">✅ <strong>9.</strong> MDE Portal mostra tag nos devices — <em>security.microsoft.com → Devices</em></li>
+    <li class="done">✅ <strong>10.</strong> MDE Device Group criado — <em>security.microsoft.com → Device groups</em></li>
+</ul>
+
+<h3>📸 Comandos de Validação</h3>
+<div class="terminal">
+    <div class="terminal-header"><div class="terminal-dot red"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div><span class="terminal-title">PowerShell — Validação Completa</span></div>
+    <div class="terminal-body"><span class="dim"># 1. Verificar Policy Definition</span>
+<span class="prompt">PS C:\&gt;</span> az policy definition show --name "mde-device-tag-windows-vms" --query "{name:name,mode:mode}" -o table
+Name                        Mode
+--------------------------  -------
+<span class="ok">mde-device-tag-windows-vms  Indexed</span>
+
+<span class="dim"># 2. Verificar Tag no Registry da VM (remoto)</span>
+<span class="prompt">PS C:\&gt;</span> az vm run-command invoke -g SecurityLab -n lab-agencia4 `
+    --command-id RunPowerShellScript `
+    --scripts "Write-Output ('SENSE: ' + (Get-Service Sense).Status); `
+               Write-Output ('TAG: ' + (Get-ItemProperty 'HKLM:\...DeviceTagging' -Name Group).Group)"
+
+<span class="ok">SENSE: Running</span>
+<span class="ok">TAG: mde-policy-me-mngenvmcap186458-rafaelluizf-1</span>
+
+<span class="dim"># 3. Verificar membros do Entra ID Group</span>
+<span class="prompt">PS C:\&gt;</span> $result = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/groups/{id}/members" -Headers $headers
+<span class="ok">Total: 8 devices</span>
+LAB-AGENCIA4, SecLab-DC, tagDEV, sap-sentinel-agent, vm-exposed-lab, ...
+
+<span class="dim"># 4. Verificar Policy Compliance</span>
+<span class="prompt">PS C:\&gt;</span> az policy state summarize --scope "/subscriptions/.../resourceGroups/SecurityLab"
+<span class="ok">Compliant: 2 | Non-Compliant: 0</span></div>
+</div>
+
+<!-- ============ TROUBLESHOOTING ============ -->
+<div class="page-break"></div>
+<h2 id="troubleshooting">18. Troubleshooting</h2>
+
+<div class="layer">
+    <div class="layer-title" style="color: var(--error);">❌ Problema: Tag não aparece no MDE Portal</div>
+    <ol>
+        <li><strong>Verificar MDE Sense Agent:</strong> <code>Get-Service -Name Sense</code> → deve estar <code>Running</code> com StartType <code>Automatic</code></li>
+        <li><strong>Verificar registry:</strong> <code>Get-ItemProperty "HKLM:\...\DeviceTagging"</code> → <code>Group</code> deve ter valor correto</li>
+        <li><strong>Aguardar sincronização:</strong> MDE sincroniza tags a cada 15-30 minutos. Primeira vez pode levar até 4 horas</li>
+        <li><strong>Verificar conectividade:</strong> VM precisa acessar <code>*.securitycenter.windows.com</code></li>
+    </ol>
+</div>
+
+<div class="layer">
+    <div class="layer-title" style="color: var(--warning);">⚠️ Problema: Policy mostra "Non-Compliant"</div>
+    <ol>
+        <li><strong>VM é Windows?</strong> Policy só se aplica a VMs Windows (osType == Windows)</li>
+        <li><strong>Managed Identity da Assignment:</strong> Precisa de role <code>Virtual Machine Contributor</code></li>
+        <li><strong>Script acessível?</strong> Testar URL: <code>Invoke-WebRequest -Uri $ScriptUri</code></li>
+        <li><strong>Forçar avaliação:</strong> <code>az policy state trigger-scan --resource-group "rg-mde-*"</code></li>
+    </ol>
+</div>
+
+<div class="layer">
+    <div class="layer-title" style="color: var(--info);">🔑 Problema: Runbook falha com erro de permissão</div>
+    <ol>
+        <li><strong>Managed Identity ativada?</strong> Automation Account → Identity → System assigned → On</li>
+        <li><strong>RBAC Reader?</strong> Subscription → IAM → MI deve ter Reader</li>
+        <li><strong>Graph API permissions?</strong> Enterprise Apps → API permissions → Group.ReadWrite.All + Device.Read.All</li>
+        <li><strong>Módulo Az.Accounts?</strong> Automation Account → Modules → Status = Available</li>
+    </ol>
+</div>
+
+<!-- ============ REFERÊNCIAS ============ -->
+<h2 id="referencias">19. Referências e URLs do Portal</h2>
+
+<table class="stage-table">
+    <tr><th>Portal</th><th>URL</th><th>O Que Verificar</th></tr>
+    <tr><td>Azure Policy - Definitions</td><td><a href="https://portal.azure.com/#view/Microsoft_Azure_Policy/PolicyMenuBlade/~/Definitions" style="color: var(--info);">portal.azure.com/...Definitions</a></td><td>Definição mde-device-tag</td></tr>
+    <tr><td>Azure Policy - Compliance</td><td><a href="https://portal.azure.com/#view/Microsoft_Azure_Policy/PolicyComplianceBlade" style="color: var(--info);">portal.azure.com/...Compliance</a></td><td>Status compliance</td></tr>
+    <tr><td>Resource Groups</td><td><a href="https://portal.azure.com/#view/HubsExtension/BrowseResourceGroups" style="color: var(--info);">portal.azure.com/...ResourceGroups</a></td><td>RG rg-mde-{sub}</td></tr>
+    <tr><td>Automation Accounts</td><td><a href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.Automation%2FAutomationAccounts" style="color: var(--info);">portal.azure.com/...AutomationAccounts</a></td><td>Runbooks, Identity</td></tr>
+    <tr><td>Entra ID Groups</td><td><a href="https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/AllGroups" style="color: var(--info);">entra.microsoft.com/...AllGroups</a></td><td>Grupo e membros</td></tr>
+    <tr><td>MDE Devices</td><td><a href="https://security.microsoft.com/machines" style="color: var(--info);">security.microsoft.com/machines</a></td><td>Tags nos devices</td></tr>
+    <tr><td>MDE Device Groups</td><td><a href="https://security.microsoft.com/securitysettings/endpoints/device_groups" style="color: var(--info);">security.microsoft.com/.../device_groups</a></td><td>Criar Device Groups</td></tr>
+    <tr><td>MDE Tags Docs</td><td><a href="https://learn.microsoft.com/microsoft-365/security/defender-endpoint/machine-tags" style="color: var(--info);">learn.microsoft.com/.../machine-tags</a></td><td>Documentação oficial</td></tr>
+</table>
+
+<h3>Documentação Oficial Microsoft</h3>
+<ul style="line-height: 2.2;">
+    <li><a href="https://learn.microsoft.com/azure/governance/policy/overview" style="color: var(--info);">Azure Policy Overview</a></li>
+    <li><a href="https://learn.microsoft.com/azure/governance/policy/concepts/effects#deployifnotexists" style="color: var(--info);">DeployIfNotExists Effect</a></li>
+    <li><a href="https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview" style="color: var(--info);">Managed Identities for Azure Resources</a></li>
+    <li><a href="https://learn.microsoft.com/microsoft-365/security/defender-endpoint/machine-tags" style="color: var(--info);">MDE Machine Tags</a></li>
+    <li><a href="https://learn.microsoft.com/microsoft-365/security/defender-endpoint/machine-groups" style="color: var(--info);">MDE Device Groups</a></li>
+    <li><a href="https://learn.microsoft.com/azure/automation/automation-runbook-types" style="color: var(--info);">Azure Automation Runbooks</a></li>
+    <li><a href="https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-windows" style="color: var(--info);">Custom Script Extension for Windows</a></li>
+</ul>
+
+<!-- ============ FOOTER ============ -->
+<div style="margin-top: 60px; text-align: center; padding: 40px; border-top: 2px solid var(--azure-blue);">
+    <h3 style="color: var(--text-bright);">MDE Policy Automation v1.0.4</h3>
+    <p style="color: var(--mde-green); font-style: italic;">"From manual chaos to automated governance — one policy at a time."</p>
+    <p style="color: var(--text-dim); margin-top: 15px;">
+        <strong>Autor:</strong> Rafael França — Customer Success Architect, Cyber Security @ Microsoft<br>
+        <strong>GitHub:</strong> <a href="https://github.com/rfranca777/MDE-PolicyAutomation" style="color: var(--info);">github.com/rfranca777/MDE-PolicyAutomation</a><br>
+        <strong>Comunidade:</strong> <a href="https://github.com/rfranca777/odefender-community" style="color: var(--info);">ODefender Community</a>
+    </p>
+</div>
+
+</div><!-- container -->
+</body>
+</html>
