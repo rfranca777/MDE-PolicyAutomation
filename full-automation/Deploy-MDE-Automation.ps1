@@ -1040,7 +1040,7 @@ $mdeInstructionsHtml = @"
         <div class="command">az automation job list --automation-account-name $automationAccountName --resource-group $resourceGroupName --output table</div>
         
         <p>Para executar manualmente:</p>
-        <div class="command">az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 GroupIdEphemeral=$groupIdEphemeral IncludeArc=$includeArc</div>
+        <div class="command">az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 GroupIdEphemeral=$groupIdEphemeral IncludeArc=$(if ($includeArc) { "true" } else { "false" })</div>
 
         <h2>ðŸ”— Links Uteis</h2>
         <ul>
