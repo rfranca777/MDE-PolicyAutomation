@@ -7,11 +7,13 @@ All notable changes to MDE Policy Automation will be documented in this file.
 ### Added
 - **Ephemeral device group**: New Entra ID Security Group `grp-mde-{sub}-ephemeral` for tracking destroyed VMs (VMSS autoscale, Kubernetes nodes, Databricks clusters, Spot instances, CI/CD runners)
 - **Ephemeral naming pattern detection**: Runbook identifies VMSS (`_N`, `vmssXXXXXX`), AKS (`aks-*`), Databricks (`workers*`), Spot/Arc (`ip-*`), CI runners (`runner-*`) patterns in device names and logs the ephemeral type for SOC
-- Ephemeral detection: devices that were in the main group but whose VM no longer exists in Azure are moved to the ephemeral group
-- Auto-cleanup: devices removed from ephemeral group when their Entra ID record expires or when a new VM matches the same device
-- Ephemeral group syncs bidirectionally every hour (add new ephemeral + remove recovered/expired)
-- SOC visibility preserved: security teams can investigate incidents on VMs that no longer exist
-- **Source**: MDE "Transient device" tagging excludes Servers (confirmed MS docs) — making this automation the only way to track ephemeral server VMs
+- **Graph API pagination**: Runbook now follows `@odata.nextLink` for all Graph API calls — supports environments with 100+ devices/members
+- **Runbook always updated on re-deploy**: Re-running the script now uploads the latest runbook code even if runbook was already Published (ensures version upgrades take effect)
+
+### Fixed
+- **CRITICAL: `$IncludeArc` boolean/string bug** — Azure Automation serializes params as strings; `if("False")` was always truthy in PowerShell. Now uses explicit string comparison. Arc support can now actually be disabled
+- **CRITICAL: Policy Assignment missing Managed Identity** — `Modify` effect requires `--mi-system-assigned` for remediation. Without it, tags were never auto-applied. Added `--mi-system-assigned --location` to assignment
+- **`$appObjectId` undefined on App Registration reuse** — PATCH permissions failed on re-runs (pre-existing since v1.0.4). Now resolved via `az ad app list` query
 
 ### Changed
 - Runbook `param()` now accepts `$GroupIdEphemeral`

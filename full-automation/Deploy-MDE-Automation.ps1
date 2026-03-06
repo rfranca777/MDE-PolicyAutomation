@@ -589,23 +589,26 @@ Write-Host "========================================================`n" -Foregro
 Write-ValidationStep "Gerando codigo do runbook..." "WAIT"
 
 $runbookCode = @'
-param($SubscriptionId,$GroupId,$GroupIdStale7,$GroupIdStale30,$GroupIdEphemeral,$IncludeArc=$true)
+param($SubscriptionId,$GroupId,$GroupIdStale7,$GroupIdStale30,$GroupIdEphemeral,$IncludeArc="true")
 Write-Output "=== MDE Device Sync Started ==="
 Write-Output "Subscription: $SubscriptionId"
 Write-Output "Main: $GroupId | Stale-7d: $GroupIdStale7 | Stale-30d: $GroupIdStale30 | Ephemeral: $GroupIdEphemeral | Arc: $IncludeArc"
+$IncludeArcBool=if($IncludeArc -eq "true" -or $IncludeArc -eq "True" -or $IncludeArc -eq $true){$true}else{$false}
+Write-Output "Arc resolved: $IncludeArcBool"
 Disable-AzContextAutosave -Scope Process|Out-Null
 try{Connect-AzAccount -Identity|Out-Null;Write-Output "Connected with Managed Identity"}catch{Write-Error "Failed to connect";exit 1}
 Set-AzContext -SubscriptionId $SubscriptionId|Out-Null
+function Get-AllGraphPages($uri,$headers){$all=@();do{$r=Invoke-RestMethod -Uri $uri -Headers $headers -Method GET;if($r.value){$all+=$r.value};$uri=$r.'@odata.nextLink'}while($uri);return $all}
 $vms=Get-AzVM;$names=@($vms.Name)
 Write-Output "Azure VMs found: $($vms.Count)"
-if($IncludeArc){try{$arc=Get-AzConnectedMachine;$names+=$arc.Name;Write-Output "Arc Machines found: $($arc.Count)"}catch{Write-Output "No Arc machines or module not available"}}
+if($IncludeArcBool){try{$arc=Get-AzConnectedMachine;$names+=$arc.Name;Write-Output "Arc Machines found: $($arc.Count)"}catch{Write-Output "No Arc machines or module not available"}}
 Write-Output "Total devices in subscription: $($names.Count)"
 $token=(Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com").Token
 $h=@{Authorization="Bearer $token";"Content-Type"="application/json"}
 $devsFull=@()
-Write-Output "Getting all Entra ID devices for matching..."
-$allDevsUri="https://graph.microsoft.com/v1.0/devices?`$select=id,displayName,deviceId,approximateLastSignInDateTime"
-try{$allDevsResp=Invoke-RestMethod -Uri $allDevsUri -Headers $h -Method GET;$allDevices=$allDevsResp.value}catch{Write-Output "ERROR: Could not retrieve devices";exit 1}
+Write-Output "Getting all Entra ID devices (with pagination)..."
+$allDevsUri="https://graph.microsoft.com/v1.0/devices?`$select=id,displayName,deviceId,approximateLastSignInDateTime&`$top=999"
+try{$allDevices=Get-AllGraphPages $allDevsUri $h}catch{Write-Output "ERROR: Could not retrieve devices: $($_.Exception.Message)";exit 1}
 Write-Output "Total Entra ID devices available: $($allDevices.Count)"
 $now=[DateTime]::UtcNow;$t7=$now.AddDays(-7);$t30=$now.AddDays(-30)
 foreach($n in $names){
@@ -618,8 +621,8 @@ $devsStale7=@($devsFull|Where-Object{$ls=$_.approximateLastSignInDateTime;if([st
 $devsStale30=@($devsFull|Where-Object{$ls=$_.approximateLastSignInDateTime;if([string]::IsNullOrEmpty($ls)){$true}else{try{[DateTime]::Parse($ls) -lt $t30}catch{$true}}})
 Write-Output "Active (last 7d): $($devsActive.Count) | Stale-7+: $($devsStale7.Count) | Stale-30+: $($devsStale30.Count)"
 Write-Output "--- MAIN group: add active, remove ephemeral/stale ---"
-$gu="https://graph.microsoft.com/v1.0/groups/$GroupId/members?`$select=id"
-try{$c=Invoke-RestMethod -Uri $gu -Headers $h -Method GET;$cids=@($c.value.id)}catch{$cids=@();Write-Output "Main group empty"}
+$gu="https://graph.microsoft.com/v1.0/groups/$GroupId/members?`$select=id&`$top=999"
+try{$cids=@((Get-AllGraphPages $gu $h).id)}catch{$cids=@();Write-Output "Main group empty"}
 Write-Output "Current main group members: $($cids.Count)"
 $activeIds=@($devsActive.id)
 $add=$activeIds|Where-Object{$_ -notin $cids};$cntA=0
@@ -635,8 +638,8 @@ Write-Output "Ephemeral detected (VM gone from Azure): $($ephemeralFromMain.Coun
 foreach($eid in $ephemeralFromMain){$eDev=$allDevices|Where-Object{$_.id -eq $eid}|Select-Object -First 1;if($eDev){$pat=Test-EphemeralName $eDev.displayName;if($pat){Write-Output "  EPH-TYPE: $($eDev.displayName) matched pattern [$pat] (VMSS/K8s/Databricks/Spot)"}else{Write-Output "  EPH-TYPE: $($eDev.displayName) (standard VM destroyed)"}}}
 if(-not [string]::IsNullOrEmpty($GroupIdEphemeral)){
 Write-Output "--- EPHEMERAL group ---"
-$geUri="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members?`$select=id"
-try{$ceR=Invoke-RestMethod -Uri $geUri -Headers $h -Method GET;$cidsEph=@($ceR.value.id)}catch{$cidsEph=@();Write-Output "Ephemeral group empty"}
+$geUri="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members?`$select=id&`$top=999"
+try{$cidsEph=@((Get-AllGraphPages $geUri $h).id)}catch{$cidsEph=@();Write-Output "Ephemeral group empty"}
 $allDeviceIds=@($allDevices.id)
 $addEph=$ephemeralFromMain|Where-Object{$_ -notin $cidsEph};$cAE=0
 foreach($d in $addEph){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cAE++;Write-Output "  EPH +add: $d (VM destroyed)"}catch{Write-Output "  EPH +fail: $d"}}
@@ -645,8 +648,8 @@ foreach($d in $remEph){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdEphe
 Write-Output "Ephemeral group: +$cAE added, -$cRE removed"}
 if(-not [string]::IsNullOrEmpty($GroupIdStale7)){
 Write-Output "--- STALE-7 group ---"
-$gs7="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members?`$select=id"
-try{$cs7=Invoke-RestMethod -Uri $gs7 -Headers $h -Method GET;$cids7=@($cs7.value.id)}catch{$cids7=@();Write-Output "Stale-7 group empty"}
+$gs7="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members?`$select=id&`$top=999"
+try{$cids7=@((Get-AllGraphPages $gs7 $h).id)}catch{$cids7=@();Write-Output "Stale-7 group empty"}
 $s7ids=@($devsStale7.id)
 $addS7=$s7ids|Where-Object{$_ -notin $cids7};$cA7=0
 foreach($d in $addS7){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cA7++;Write-Output "  S7 +add: $d"}catch{Write-Output "  S7 +fail: $d"}}
@@ -655,8 +658,8 @@ foreach($d in $remS7){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdStale
 Write-Output "Stale-7 group: +$cA7 added, -$cR7 removed"}
 if(-not [string]::IsNullOrEmpty($GroupIdStale30)){
 Write-Output "--- STALE-30 group ---"
-$gs30="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members?`$select=id"
-try{$cs30=Invoke-RestMethod -Uri $gs30 -Headers $h -Method GET;$cids30=@($cs30.value.id)}catch{$cids30=@();Write-Output "Stale-30 group empty"}
+$gs30="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members?`$select=id&`$top=999"
+try{$cids30=@((Get-AllGraphPages $gs30 $h).id)}catch{$cids30=@();Write-Output "Stale-30 group empty"}
 $s30ids=@($devsStale30.id)
 $addS30=$s30ids|Where-Object{$_ -notin $cids30};$cA30=0
 foreach($d in $addS30){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cA30++;Write-Output "  S30 +add: $d"}catch{Write-Output "  S30 +fail: $d"}}
@@ -675,12 +678,7 @@ $existingRunbook = az automation runbook show --name $runbookName --automation-a
 
 if ($existingRunbook) {
     Write-ValidationStep "Runbook existente detectado (State: $($existingRunbook.state))" "OK"
-    if ($existingRunbook.state -eq "Published") {
-        Write-ValidationStep "Runbook ja publicado - pulando criacao" "OK"
-        $rbValidation = $existingRunbook
-    } else {
-        Write-ValidationStep "Atualizando runbook existente..." "WAIT"
-    }
+    Write-ValidationStep "Atualizando runbook com codigo v1.3.0..." "WAIT"
 } else {
     Write-ValidationStep "Criando novo runbook..." "WAIT"
     
@@ -719,8 +717,8 @@ if ($existingRunbook) {
     Start-Sleep -Seconds 5
 }
 
-if (-not $existingRunbook -or $existingRunbook.state -ne "Published") {
-    Write-ValidationStep "Uploading runbook content..." "WAIT"
+# Always upload and publish (ensures version upgrades take effect)
+Write-ValidationStep "Uploading runbook content..." "WAIT"
     $contentUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/draft/content?api-version=2023-11-01"
     
     $contentResponse = az rest --method PUT --uri $contentUri --body "@$runbookFile" --headers "Content-Type=text/plain" -o json 2>&1
@@ -745,14 +743,11 @@ if (-not $existingRunbook -or $existingRunbook.state -ne "Published") {
         Write-ValidationStep "Erro ao publicar: $pubResponse" "ERROR"
         exit 1
     }
-}
 Start-Sleep -Seconds 3
 
 # VALIDACAO FINAL
 Write-ValidationStep "Validando runbook..." "WAIT"
-if (-not $rbValidation) {
-    $rbValidation = az automation runbook show --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --query "{Name:name,State:state,Type:runbookType}" -o json 2>$null | ConvertFrom-Json
-}
+$rbValidation = az automation runbook show --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --query "{Name:name,State:state,Type:runbookType}" -o json 2>$null | ConvertFrom-Json
 
 if ($rbValidation -and $rbValidation.State -eq "Published") {
     Write-ValidationStep "Runbook validado (State: Published)" "OK"
@@ -868,6 +863,8 @@ az policy assignment create `
     --policy $policyName `
     --scope "/subscriptions/$subscriptionId" `
     --display-name "MDE - Auto-tag VMs and Arc Machines Assignment" `
+    --mi-system-assigned `
+    --location $location `
     --output none 2>$null
 
 if ($LASTEXITCODE -eq 0) {
