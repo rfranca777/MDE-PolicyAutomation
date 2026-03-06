@@ -809,7 +809,7 @@ $jobScheduleBodyObj = @{
             GroupIdStale7    = $groupIdStale7
             GroupIdStale30   = $groupIdStale30
             GroupIdEphemeral = $groupIdEphemeral
-            IncludeArc       = if ($includeArc) { "true" } else { "false" }
+            IncludeArc       = $(if ($includeArc) { "true" } else { "false" })
         }
     }
 }
