@@ -1013,7 +1013,7 @@ $mdeInstructionsHtml = @"
             serao automaticamente sincronizados para o MDE Device Group.
         </div>
 
-        <h2>ðŸ"„ Sincronizacao Automatica — 3 Grupos</h2>
+        <h2>ðŸ"„ Sincronizacao Automatica — 4 Grupos</h2>
         <p>O runbook <span class="value">$runbookName</span> executa a cada hora e automaticamente:</p>
         <ol>
             <li>Lista todas as VMs Azure e Azure Arc machines da subscription</li>
@@ -1021,7 +1021,7 @@ $mdeInstructionsHtml = @"
             <li><strong>Grupo principal</strong> <span class="value">$entraGroupName</span>: apenas devices que existem na subscription E reportaram nos ultimos 7 dias. Remove automaticamente VMs apagadas (efemeros) e inativos.</li>
             <li><strong>Grupo stale-7d</strong> <span class="value">$entraGroupStale7Name</span>: devices sem comunicacao ha 7+ dias. Remove automaticamente quando o device volta a comunicar.</li>
             <li><strong>Grupo stale-30d</strong> <span class="value">$entraGroupStale30Name</span>: devices sem comunicacao ha 30+ dias (subconjunto do stale-7d).</li>
-            <li><strong>Grupo ephemeral</strong> <span class="value">$entraGroupEphemeralName</span>: devices cujas VMs foram destruidas (VMSS, K8s, Databricks, Spot). Preserva visibilidade para SOC. Auto-limpa quando o registo Entra ID expira ou a VM reaparece.</li>
+            <li><strong>Grupo ephemeral</strong> <span class="value">$entraGroupEphemeralName</span>: devices cujas VMs foram destruidas (VMSS, K8s, Databricks, Spot). Preserva visibilidade para SOC. Auto-limpa apenas quando o registo Entra ID expira (retencao do tenant).</li>
             <li>MDE sincroniza cada grupo Entra ID com o MDE Device Group correspondente.</li>
         </ol>
         <div class="info-box">
@@ -1043,7 +1043,7 @@ $mdeInstructionsHtml = @"
         <div class="command">az automation job list --automation-account-name $automationAccountName --resource-group $resourceGroupName --output table</div>
         
         <p>Para executar manualmente:</p>
-        <div class="command">az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 IncludeArc=$includeArc</div>
+        <div class="command">az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 GroupIdEphemeral=$groupIdEphemeral IncludeArc=$includeArc</div>
 
         <h2>ðŸ”— Links Uteis</h2>
         <ul>
