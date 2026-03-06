@@ -628,9 +628,12 @@ $rem=$cids|Where-Object{$_ -notin $activeIds};$cntR=0
 foreach($d in $rem){$ru="https://graph.microsoft.com/v1.0/groups/$GroupId/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cntR++;Write-Output "  MAIN -rem: $d (ephemeral/stale)"}catch{Write-Output "  MAIN -fail: $d"}}
 Write-Output "Main group: +$cntA added, -$cntR removed"
 $allMatchedIds=@($devsFull.id)
+$ephPatterns=@('^aks-','vmss[0-9a-z]{6}$','_[0-9]+$','^workers[0-9]','^ip-[0-9]+-[0-9]+-[0-9]+-[0-9]+','runner-[0-9a-z]+','databricks-','spark-','agent-[0-9]+')
+function Test-EphemeralName($n){foreach($p in $ephPatterns){if($n -match $p){return $p}};return $null}
 $ephemeralFromMain=@($rem|Where-Object{$_ -notin $allMatchedIds})
-Write-Output "Ephemeral detected (VM deleted from Azure): $($ephemeralFromMain.Count)"
-if(-not [string]::IsNullOrEmpty($GroupIdEphemeral) -and $ephemeralFromMain.Count -gt 0){
+Write-Output "Ephemeral detected (VM gone from Azure): $($ephemeralFromMain.Count)"
+foreach($eid in $ephemeralFromMain){$eDev=$allDevices|Where-Object{$_.id -eq $eid}|Select-Object -First 1;if($eDev){$pat=Test-EphemeralName $eDev.displayName;if($pat){Write-Output "  EPH-TYPE: $($eDev.displayName) matched pattern [$pat] (VMSS/K8s/Databricks/Spot)"}else{Write-Output "  EPH-TYPE: $($eDev.displayName) (standard VM destroyed)"}}}
+if(-not [string]::IsNullOrEmpty($GroupIdEphemeral)){
 Write-Output "--- EPHEMERAL group ---"
 $geUri="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members?`$select=id"
 try{$ceR=Invoke-RestMethod -Uri $geUri -Headers $h -Method GET;$cidsEph=@($ceR.value.id)}catch{$cidsEph=@();Write-Output "Ephemeral group empty"}

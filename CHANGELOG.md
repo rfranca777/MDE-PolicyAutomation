@@ -6,9 +6,12 @@ All notable changes to MDE Policy Automation will be documented in this file.
 
 ### Added
 - **Ephemeral device group**: New Entra ID Security Group `grp-mde-{sub}-ephemeral` for tracking destroyed VMs (VMSS autoscale, Kubernetes nodes, Databricks clusters, Spot instances, CI/CD runners)
-- Ephemeral detection: devices that were in the main group but whose VM no longer exists in Azure are moved to the ephemeral group instead of simply being purged
+- **Ephemeral naming pattern detection**: Runbook identifies VMSS (`_N`, `vmssXXXXXX`), AKS (`aks-*`), Databricks (`workers*`), Spot/Arc (`ip-*`), CI runners (`runner-*`) patterns in device names and logs the ephemeral type for SOC
+- Ephemeral detection: devices that were in the main group but whose VM no longer exists in Azure are moved to the ephemeral group
 - Auto-cleanup: devices removed from ephemeral group when their Entra ID record expires or when a new VM matches the same device
+- Ephemeral group syncs bidirectionally every hour (add new ephemeral + remove recovered/expired)
 - SOC visibility preserved: security teams can investigate incidents on VMs that no longer exist
+- **Source**: MDE "Transient device" tagging excludes Servers (confirmed MS docs) — making this automation the only way to track ephemeral server VMs
 
 ### Changed
 - Runbook `param()` now accepts `$GroupIdEphemeral`
