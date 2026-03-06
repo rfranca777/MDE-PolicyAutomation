@@ -2,6 +2,22 @@
 
 All notable changes to MDE Policy Automation will be documented in this file.
 
+## [1.3.0] — 2026-03-06
+
+### Added
+- **Ephemeral device group**: New Entra ID Security Group `grp-mde-{sub}-ephemeral` for tracking destroyed VMs (VMSS autoscale, Kubernetes nodes, Databricks clusters, Spot instances, CI/CD runners)
+- Ephemeral detection: devices that were in the main group but whose VM no longer exists in Azure are moved to the ephemeral group instead of simply being purged
+- Auto-cleanup: devices removed from ephemeral group when their Entra ID record expires or when a new VM matches the same device
+- SOC visibility preserved: security teams can investigate incidents on VMs that no longer exist
+
+### Changed
+- Runbook `param()` now accepts `$GroupIdEphemeral`
+- Stage 4 loop creates 3 auxiliary groups (stale-7d, stale-30d, ephemeral)
+- Stage 11 Job Schedule passes `GroupIdEphemeral` parameter
+- Stage 13 HTML guide updated with 4-group architecture
+- Report shows all 8 groups (4 Entra + 4 MDE) and updated manual run command
+- Version bumped to 1.3.0
+
 ## [1.2.0] — 2026-03-06
 
 ### Added

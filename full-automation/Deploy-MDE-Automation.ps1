@@ -12,8 +12,9 @@
     - Resource Group with corporate tags
     - Automation Account with Managed Identity
     - RBAC Reader + Graph API permissions
-    - Entra ID Security Groups: main (active last 7d), stale-7d (inactive 7+d), stale-30d (inactive 30+d)
-    - Automatic removal of ephemeral devices (VMs deleted from Azure)
+    - Entra ID Security Groups: main (active last 7d), stale-7d, stale-30d, ephemeral
+    - Ephemeral device tracking (VMSS, K8s, Databricks, Spot — VMs destroyed but Entra ID device persists)
+    - Automatic removal of deleted/stale devices from main group
     - Runbook + Schedule + Job Schedule
     - Azure Policy for device tagging (DeployIfNotExists)
     - MDE Device Groups (auto-generated HTML guide)
@@ -21,7 +22,7 @@
     - HTML report generation
     
 .NOTES
-    Version:  1.2.0 — Community Edition
+    Version:  1.3.0 — Community Edition
     Author:   Rafael França — github.com/rfranca777
     License:  MIT
     Project:  https://github.com/rfranca777/MDE-PolicyAutomation
@@ -78,7 +79,7 @@ Clear-Host
 Write-Host "`n============================================================" -ForegroundColor Magenta
 Write-Host "  MICROSOFT DEFENDER FOR ENDPOINT" -ForegroundColor White
 Write-Host "  Deployment Completo - 14 Stages - AUTOMACAO TOTAL" -ForegroundColor Gray
-Write-Host "  v1.2.0 - Full Automation Edition" -ForegroundColor Gray
+Write-Host "  v1.3.0 - Full Automation Edition" -ForegroundColor Gray
 Write-Host "============================================================`n" -ForegroundColor Magenta
 
 # ============================================================
@@ -138,14 +139,17 @@ $runbookName = "rb-mde-sync-$subNameShort"
 $policyName             = "pol-mde-tag-$subNameShort"
 $entraGroupStale7Name  = "grp-mde-$subNameShort-stale7"
 $entraGroupStale30Name = "grp-mde-$subNameShort-stale30"
+$entraGroupEphemeralName = "grp-mde-$subNameShort-ephemeral"
 $mdeGroupStale7Name    = "mde-policy-$subNameShort-stale7"
 $mdeGroupStale30Name   = "mde-policy-$subNameShort-stale30"
+$mdeGroupEphemeralName = "mde-policy-$subNameShort-ephemeral"
 
 Write-ValidationStep "Resource Group: $resourceGroupName" "INFO"
 Write-ValidationStep "Automation Account: $automationAccountName" "INFO"
 Write-ValidationStep "Entra Group (main): $entraGroupName" "INFO"
 Write-ValidationStep "Entra Group Stale-7d: $entraGroupStale7Name" "INFO"
 Write-ValidationStep "Entra Group Stale-30d: $entraGroupStale30Name" "INFO"
+Write-ValidationStep "Entra Group Ephemeral: $entraGroupEphemeralName" "INFO"
 Write-ValidationStep "MDE Device Group: $mdeDeviceGroupName" "INFO"
 Write-ValidationStep "Schedule: $scheduleName" "INFO"
 Write-ValidationStep "Runbook: $runbookName" "INFO"
@@ -263,7 +267,8 @@ $groupIdStale30 = $null
 
 foreach ($staleGroupDef in @(
     @{ Name = $entraGroupStale7Name;  Tag = "7";  Desc = "MDE Stale Devices (7d) - $subscriptionName - Inactive 7+ days" },
-    @{ Name = $entraGroupStale30Name; Tag = "30"; Desc = "MDE Stale Devices (30d) - $subscriptionName - Inactive 30+ days" }
+    @{ Name = $entraGroupStale30Name; Tag = "30"; Desc = "MDE Stale Devices (30d) - $subscriptionName - Inactive 30+ days" },
+    @{ Name = $entraGroupEphemeralName; Tag = "eph"; Desc = "MDE Ephemeral Devices - $subscriptionName - VMs destroyed (VMSS/K8s/Databricks/Spot)" }
 )) {
     $sgName = $staleGroupDef.Name
     $sgDesc = $staleGroupDef.Desc
@@ -297,10 +302,12 @@ foreach ($staleGroupDef in @(
 
     if ($staleGroupDef.Tag -eq "7")  { $groupIdStale7  = $sgId }
     if ($staleGroupDef.Tag -eq "30") { $groupIdStale30 = $sgId }
+    if ($staleGroupDef.Tag -eq "eph") { $groupIdEphemeral = $sgId }
 }
 
 Write-ValidationStep "Grupo Stale-7d ID: $groupIdStale7" "INFO"
 Write-ValidationStep "Grupo Stale-30d ID: $groupIdStale30" "INFO"
+Write-ValidationStep "Grupo Ephemeral ID: $groupIdEphemeral" "INFO"
 
 # ============================================================
 # ETAPA 5: AUTOMATION ACCOUNT
@@ -582,10 +589,10 @@ Write-Host "========================================================`n" -Foregro
 Write-ValidationStep "Gerando codigo do runbook..." "WAIT"
 
 $runbookCode = @'
-param($SubscriptionId,$GroupId,$GroupIdStale7,$GroupIdStale30,$IncludeArc=$true)
+param($SubscriptionId,$GroupId,$GroupIdStale7,$GroupIdStale30,$GroupIdEphemeral,$IncludeArc=$true)
 Write-Output "=== MDE Device Sync Started ==="
 Write-Output "Subscription: $SubscriptionId"
-Write-Output "Main: $GroupId | Stale-7d: $GroupIdStale7 | Stale-30d: $GroupIdStale30 | Arc: $IncludeArc"
+Write-Output "Main: $GroupId | Stale-7d: $GroupIdStale7 | Stale-30d: $GroupIdStale30 | Ephemeral: $GroupIdEphemeral | Arc: $IncludeArc"
 Disable-AzContextAutosave -Scope Process|Out-Null
 try{Connect-AzAccount -Identity|Out-Null;Write-Output "Connected with Managed Identity"}catch{Write-Error "Failed to connect";exit 1}
 Set-AzContext -SubscriptionId $SubscriptionId|Out-Null
@@ -620,6 +627,19 @@ foreach($d in $add){$au="https://graph.microsoft.com/v1.0/groups/$GroupId/member
 $rem=$cids|Where-Object{$_ -notin $activeIds};$cntR=0
 foreach($d in $rem){$ru="https://graph.microsoft.com/v1.0/groups/$GroupId/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cntR++;Write-Output "  MAIN -rem: $d (ephemeral/stale)"}catch{Write-Output "  MAIN -fail: $d"}}
 Write-Output "Main group: +$cntA added, -$cntR removed"
+$allMatchedIds=@($devsFull.id)
+$ephemeralFromMain=@($rem|Where-Object{$_ -notin $allMatchedIds})
+Write-Output "Ephemeral detected (VM deleted from Azure): $($ephemeralFromMain.Count)"
+if(-not [string]::IsNullOrEmpty($GroupIdEphemeral) -and $ephemeralFromMain.Count -gt 0){
+Write-Output "--- EPHEMERAL group ---"
+$geUri="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members?`$select=id"
+try{$ceR=Invoke-RestMethod -Uri $geUri -Headers $h -Method GET;$cidsEph=@($ceR.value.id)}catch{$cidsEph=@();Write-Output "Ephemeral group empty"}
+$allDeviceIds=@($allDevices.id)
+$addEph=$ephemeralFromMain|Where-Object{$_ -notin $cidsEph};$cAE=0
+foreach($d in $addEph){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cAE++;Write-Output "  EPH +add: $d (VM destroyed)"}catch{Write-Output "  EPH +fail: $d"}}
+$remEph=$cidsEph|Where-Object{$_ -notin $allDeviceIds -or $_ -in $allMatchedIds};$cRE=0
+foreach($d in $remEph){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cRE++;Write-Output "  EPH -rem: $d (Entra ID gone or VM reappeared)"}catch{Write-Output "  EPH -fail: $d"}}
+Write-Output "Ephemeral group: +$cAE added, -$cRE removed"}
 if(-not [string]::IsNullOrEmpty($GroupIdStale7)){
 Write-Output "--- STALE-7 group ---"
 $gs7="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members?`$select=id"
@@ -786,11 +806,12 @@ $jobScheduleBodyObj = @{
             name = $runbookName
         }
         parameters = @{
-            SubscriptionId  = $subscriptionId
-            GroupId         = $groupId
-            GroupIdStale7   = $groupIdStale7
-            GroupIdStale30  = $groupIdStale30
-            IncludeArc      = $includeArc
+            SubscriptionId   = $subscriptionId
+            GroupId          = $groupId
+            GroupIdStale7    = $groupIdStale7
+            GroupIdStale30   = $groupIdStale30
+            GroupIdEphemeral = $groupIdEphemeral
+            IncludeArc       = $includeArc
         }
     }
 }
@@ -997,6 +1018,7 @@ $mdeInstructionsHtml = @"
             <li><strong>Grupo principal</strong> <span class="value">$entraGroupName</span>: apenas devices que existem na subscription E reportaram nos ultimos 7 dias. Remove automaticamente VMs apagadas (efemeros) e inativos.</li>
             <li><strong>Grupo stale-7d</strong> <span class="value">$entraGroupStale7Name</span>: devices sem comunicacao ha 7+ dias. Remove automaticamente quando o device volta a comunicar.</li>
             <li><strong>Grupo stale-30d</strong> <span class="value">$entraGroupStale30Name</span>: devices sem comunicacao ha 30+ dias (subconjunto do stale-7d).</li>
+            <li><strong>Grupo ephemeral</strong> <span class="value">$entraGroupEphemeralName</span>: devices cujas VMs foram destruidas (VMSS, K8s, Databricks, Spot). Preserva visibilidade para SOC. Auto-limpa quando o registo Entra ID expira ou a VM reaparece.</li>
             <li>MDE sincroniza cada grupo Entra ID com o MDE Device Group correspondente.</li>
         </ol>
         <div class="info-box">
@@ -1010,6 +1032,7 @@ $mdeInstructionsHtml = @"
             <li><strong>Principal:</strong> <span class="value">$mdeDeviceGroupName</span> &#8594; <span class="value">$entraGroupName</span></li>
             <li><strong>Stale-7d:</strong> <span class="value">$mdeGroupStale7Name</span> &#8594; <span class="value">$entraGroupStale7Name</span></li>
             <li><strong>Stale-30d:</strong> <span class="value">$mdeGroupStale30Name</span> &#8594; <span class="value">$entraGroupStale30Name</span></li>
+            <li><strong>Ephemeral:</strong> <span class="value">$mdeGroupEphemeralName</span> &#8594; <span class="value">$entraGroupEphemeralName</span></li>
         </ul>
 
         <h2>ðŸ"Š Monitoramento</h2>
@@ -1029,7 +1052,7 @@ $mdeInstructionsHtml = @"
 
         <div class="timestamp">
             ðŸ“… Gerado em: $(Get-Date -Format "dd/MM/yyyy HH:mm:ss")
-            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.2.0
+            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.3.0
             <br>ðŸ“¦ Subscription: $subscriptionName ($subscriptionId)
         </div>
     </div>
@@ -1424,9 +1447,11 @@ Write-Host "  Managed Identity: $principalId" -ForegroundColor White
 Write-Host "  Entra Group (main): $entraGroupName (ID: $groupId)" -ForegroundColor White
 Write-Host "  Entra Group Stale-7d: $entraGroupStale7Name (ID: $groupIdStale7)" -ForegroundColor White
 Write-Host "  Entra Group Stale-30d: $entraGroupStale30Name (ID: $groupIdStale30)" -ForegroundColor White
+Write-Host "  Entra Group Ephemeral: $entraGroupEphemeralName (ID: $groupIdEphemeral)" -ForegroundColor White
 Write-Host "  MDE Device Group: $mdeDeviceGroupName (manual setup required)" -ForegroundColor White
 Write-Host "  MDE Group Stale-7d: $mdeGroupStale7Name (manual setup required)" -ForegroundColor White
 Write-Host "  MDE Group Stale-30d: $mdeGroupStale30Name (manual setup required)" -ForegroundColor White
+Write-Host "  MDE Group Ephemeral: $mdeGroupEphemeralName (manual setup required)" -ForegroundColor White
 Write-Host "  Runbook: $runbookName" -ForegroundColor White
 Write-Host "  Schedule: $scheduleName (proxima: $startTime)" -ForegroundColor White
 Write-Host "  Azure Policy: $policyName" -ForegroundColor White
@@ -1460,7 +1485,7 @@ Write-Host "  $(if ($appId) { '5' } else { '3' }). Aguarde primeira execucao aut
 
 Write-Host "`nCOMANDOS UTEIS:" -ForegroundColor Cyan
 Write-Host "  # Executar runbook manualmente:" -ForegroundColor Gray
-Write-Host "  az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 IncludeArc=$includeArc" -ForegroundColor White
+Write-Host "  az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 GroupIdEphemeral=$groupIdEphemeral IncludeArc=$includeArc" -ForegroundColor White
 Write-Host ""
 Write-Host "  # Listar jobs:" -ForegroundColor Gray
 Write-Host "  az automation job list --automation-account-name $automationAccountName --resource-group $resourceGroupName --output table" -ForegroundColor White

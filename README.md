@@ -99,7 +99,8 @@ You have **multiple Azure subscriptions** with Windows VMs spread everywhere. Mi
 ✅ Full audit: who's in which group, when, why  
 ✅ Azure Arc machines included automatically  
 ✅ Stale device groups (7d + 30d) synced every hour  
-✅ Ephemeral VMs removed automatically from groups  
+✅ Ephemeral VMs tracked (VMSS, K8s, Databricks, Spot)  
+✅ Destroyed VMs preserved for SOC investigation  
 
 </td>
 </tr>
