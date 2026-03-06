@@ -719,30 +719,30 @@ if ($existingRunbook) {
 
 # Always upload and publish (ensures version upgrades take effect)
 Write-ValidationStep "Uploading runbook content..." "WAIT"
-    $contentUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/draft/content?api-version=2023-11-01"
-    
-    $contentResponse = az rest --method PUT --uri $contentUri --body "@$runbookFile" --headers "Content-Type=text/plain" -o json 2>&1
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-ValidationStep "Runbook content uploaded" "OK"
-    } else {
-        Write-ValidationStep "Erro ao fazer upload: $contentResponse" "ERROR"
-        exit 1
-    }
-    
-    Start-Sleep -Seconds 5
-    
-    Write-ValidationStep "Publishing runbook..." "WAIT"
-    $pubUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/publish?api-version=2023-11-01"
-    
-    $pubResponse = az rest --method POST --uri $pubUri -o json 2>&1
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-ValidationStep "Runbook publicado" "OK"
-    } else {
-        Write-ValidationStep "Erro ao publicar: $pubResponse" "ERROR"
-        exit 1
-    }
+$contentUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/draft/content?api-version=2023-11-01"
+
+$contentResponse = az rest --method PUT --uri $contentUri --body "@$runbookFile" --headers "Content-Type=text/plain" -o json 2>&1
+
+if ($LASTEXITCODE -eq 0) {
+    Write-ValidationStep "Runbook content uploaded" "OK"
+} else {
+    Write-ValidationStep "Erro ao fazer upload: $contentResponse" "ERROR"
+    exit 1
+}
+
+Start-Sleep -Seconds 5
+
+Write-ValidationStep "Publishing runbook..." "WAIT"
+$pubUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName/publish?api-version=2023-11-01"
+
+$pubResponse = az rest --method POST --uri $pubUri -o json 2>&1
+
+if ($LASTEXITCODE -eq 0) {
+    Write-ValidationStep "Runbook publicado" "OK"
+} else {
+    Write-ValidationStep "Erro ao publicar: $pubResponse" "ERROR"
+    exit 1
+}
 Start-Sleep -Seconds 3
 
 # VALIDACAO FINAL
@@ -809,7 +809,7 @@ $jobScheduleBodyObj = @{
             GroupIdStale7    = $groupIdStale7
             GroupIdStale30   = $groupIdStale30
             GroupIdEphemeral = $groupIdEphemeral
-            IncludeArc       = $includeArc
+            IncludeArc       = if ($includeArc) { "true" } else { "false" }
         }
     }
 }
@@ -1487,7 +1487,7 @@ Write-Host "  $(if ($appId) { '5' } else { '3' }). Aguarde primeira execucao aut
 
 Write-Host "`nCOMANDOS UTEIS:" -ForegroundColor Cyan
 Write-Host "  # Executar runbook manualmente:" -ForegroundColor Gray
-Write-Host "  az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 GroupIdEphemeral=$groupIdEphemeral IncludeArc=$includeArc" -ForegroundColor White
+Write-Host "  az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 GroupIdEphemeral=$groupIdEphemeral IncludeArc=$(if ($includeArc) { 'true' } else { 'false' })" -ForegroundColor White
 Write-Host ""
 Write-Host "  # Listar jobs:" -ForegroundColor Gray
 Write-Host "  az automation job list --automation-account-name $automationAccountName --resource-group $resourceGroupName --output table" -ForegroundColor White
