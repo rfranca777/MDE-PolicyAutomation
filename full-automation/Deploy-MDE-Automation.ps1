@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     MDE Policy Automation — 14-Stage Autonomous Deployment
     
@@ -622,15 +622,15 @@ $devsStale30=@($devsFull|Where-Object{$ls=$_.approximateLastSignInDateTime;if([s
 Write-Output "Active (last 7d): $($devsActive.Count) | Stale-7+: $($devsStale7.Count) | Stale-30+: $($devsStale30.Count)"
 Write-Output "--- MAIN group: add active, remove ephemeral/stale ---"
 $gu="https://graph.microsoft.com/v1.0/groups/$GroupId/members?`$select=id&`$top=999"
-try{$cids=@((Get-AllGraphPages $gu $h).id)}catch{$cids=@();Write-Output "Main group empty"}
+try{$m=Get-AllGraphPages $gu $h;$cids=@($m|ForEach-Object{$_.id}|Where-Object{$_})}catch{$cids=@();Write-Output "Main group empty"}
 Write-Output "Current main group members: $($cids.Count)"
-$activeIds=@($devsActive.id)
+$activeIds=@($devsActive|ForEach-Object{$_.id}|Where-Object{$_})
 $add=$activeIds|Where-Object{$_ -notin $cids};$cntA=0
 foreach($d in $add){$au="https://graph.microsoft.com/v1.0/groups/$GroupId/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cntA++;Write-Output "  MAIN +add: $d"}catch{Write-Output "  MAIN +fail: $d"}}
 $rem=$cids|Where-Object{$_ -notin $activeIds};$cntR=0
 foreach($d in $rem){$ru="https://graph.microsoft.com/v1.0/groups/$GroupId/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cntR++;Write-Output "  MAIN -rem: $d (ephemeral/stale)"}catch{Write-Output "  MAIN -fail: $d"}}
 Write-Output "Main group: +$cntA added, -$cntR removed"
-$allMatchedIds=@($devsFull.id)
+$allMatchedIds=@($devsFull|ForEach-Object{$_.id}|Where-Object{$_})
 $ephPatterns=@('^aks-','vmss[0-9a-z]{6}$','_[0-9]+$','^workers[0-9]','^ip-[0-9]+-[0-9]+-[0-9]+-[0-9]+','runner-[0-9a-z]+','databricks-','spark-','agent-[0-9]+')
 function Test-EphemeralName($n){foreach($p in $ephPatterns){if($n -match $p){return $p}};return $null}
 $ephemeralFromMain=@($rem|Where-Object{$_ -notin $allMatchedIds})
@@ -639,8 +639,8 @@ foreach($eid in $ephemeralFromMain){$eDev=$allDevices|Where-Object{$_.id -eq $ei
 if(-not [string]::IsNullOrEmpty($GroupIdEphemeral)){
 Write-Output "--- EPHEMERAL group ---"
 $geUri="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members?`$select=id&`$top=999"
-try{$cidsEph=@((Get-AllGraphPages $geUri $h).id)}catch{$cidsEph=@();Write-Output "Ephemeral group empty"}
-$allDeviceIds=@($allDevices.id)
+try{$m=Get-AllGraphPages $geUri $h;$cidsEph=@($m|ForEach-Object{$_.id}|Where-Object{$_})}catch{$cidsEph=@();Write-Output "Ephemeral group empty"}
+$allDeviceIds=@($allDevices|ForEach-Object{$_.id}|Where-Object{$_})
 $addEph=$ephemeralFromMain|Where-Object{$_ -notin $cidsEph};$cAE=0
 foreach($d in $addEph){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cAE++;Write-Output "  EPH +add: $d (VM destroyed)"}catch{Write-Output "  EPH +fail: $d"}}
 $remEph=$cidsEph|Where-Object{$_ -notin $allDeviceIds};$cRE=0
@@ -649,8 +649,8 @@ Write-Output "Ephemeral group: +$cAE added, -$cRE removed"}
 if(-not [string]::IsNullOrEmpty($GroupIdStale7)){
 Write-Output "--- STALE-7 group ---"
 $gs7="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members?`$select=id&`$top=999"
-try{$cids7=@((Get-AllGraphPages $gs7 $h).id)}catch{$cids7=@();Write-Output "Stale-7 group empty"}
-$s7ids=@($devsStale7.id)
+try{$m=Get-AllGraphPages $gs7 $h;$cids7=@($m|ForEach-Object{$_.id}|Where-Object{$_})}catch{$cids7=@();Write-Output "Stale-7 group empty"}
+$s7ids=@($devsStale7|ForEach-Object{$_.id}|Where-Object{$_})
 $addS7=$s7ids|Where-Object{$_ -notin $cids7};$cA7=0
 foreach($d in $addS7){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cA7++;Write-Output "  S7 +add: $d"}catch{Write-Output "  S7 +fail: $d"}}
 $remS7=$cids7|Where-Object{$_ -notin $s7ids};$cR7=0
@@ -659,8 +659,8 @@ Write-Output "Stale-7 group: +$cA7 added, -$cR7 removed"}
 if(-not [string]::IsNullOrEmpty($GroupIdStale30)){
 Write-Output "--- STALE-30 group ---"
 $gs30="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members?`$select=id&`$top=999"
-try{$cids30=@((Get-AllGraphPages $gs30 $h).id)}catch{$cids30=@();Write-Output "Stale-30 group empty"}
-$s30ids=@($devsStale30.id)
+try{$m=Get-AllGraphPages $gs30 $h;$cids30=@($m|ForEach-Object{$_.id}|Where-Object{$_})}catch{$cids30=@();Write-Output "Stale-30 group empty"}
+$s30ids=@($devsStale30|ForEach-Object{$_.id}|Where-Object{$_})
 $addS30=$s30ids|Where-Object{$_ -notin $cids30};$cA30=0
 foreach($d in $addS30){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cA30++;Write-Output "  S30 +add: $d"}catch{Write-Output "  S30 +fail: $d"}}
 $remS30=$cids30|Where-Object{$_ -notin $s30ids};$cR30=0
