@@ -1030,7 +1030,7 @@ $mdeInstructionsHtml = @"
         </div>
 
         <h2>ðŸ–¥ Grupos MDE a Criar no Portal</h2>
-        <p>Crie 3 Device Groups em <a href="https://security.microsoft.com/securitysettings/endpoints/device_groups" target="_blank">security.microsoft.com</a>, vinculando os grupos Entra ID:</p>
+        <p>Crie 4 Device Groups em <a href="https://security.microsoft.com/securitysettings/endpoints/device_groups" target="_blank">security.microsoft.com</a>, vinculando os grupos Entra ID:</p>
         <ul>
             <li><strong>Principal:</strong> <span class="value">$mdeDeviceGroupName</span> &#8594; <span class="value">$entraGroupName</span></li>
             <li><strong>Stale-7d:</strong> <span class="value">$mdeGroupStale7Name</span> &#8594; <span class="value">$entraGroupStale7Name</span></li>
@@ -1094,6 +1094,8 @@ $existingAppCheck = az ad app list --filter "displayName eq '$appDisplayName'" -
 
 if ($existingAppCheck) {
     $appId = $existingAppCheck
+    # Obter objectId para PATCH de permissoes
+    $appObjectId = az ad app list --filter "displayName eq '$appDisplayName'" --query "[0].id" -o tsv 2>$null
     Write-ValidationStep "App Registration existente reutilizado (ID: $appId)" "OK"
 } else {
     Write-ValidationStep "Criando novo App Registration..." "WAIT"
