@@ -4,7 +4,7 @@
 
 <br/>
 
-[![Version](https://img.shields.io/badge/Version-1.0.4-00ff88?style=for-the-badge&logo=github)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.1.0-00ff88?style=for-the-badge&logo=github)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white)](https://github.com/PowerShell/PowerShell)
 [![Azure Policy](https://img.shields.io/badge/Azure_Policy-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white)](https://learn.microsoft.com/azure/governance/policy/)
@@ -53,7 +53,7 @@ You have **multiple Azure subscriptions** with Windows VMs spread everywhere. Mi
 │    │  🤖  Azure Automation — Hourly sync, zero human intervention        │       │
 │    └──────────────────────────────────────────────────────────────────────┘       │
 │                                                                                  │
-│    v1.0.4 │ 14-Stage Full Automation │ MIT License │ PowerShell 5.1+             │
+│    v1.1.0 │ 14-Stage Full Automation │ MIT License │ PowerShell 5.1+             │
 │                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -98,6 +98,8 @@ You have **multiple Azure subscriptions** with Windows VMs spread everywhere. Mi
 ✅ New subscription → run script → done in 10 minutes  
 ✅ Full audit: who's in which group, when, why  
 ✅ Azure Arc machines included automatically  
+✅ Stale device groups (7d + 30d) synced every hour  
+✅ Ephemeral VMs removed automatically from groups  
 
 </td>
 </tr>
@@ -117,7 +119,7 @@ This is not a script — it's a **fully autonomous deployment pipeline**:
 | 1 | 🔐 Authentication & subscription selection | Azure CLI context |
 | 2 | 🏷️ Intelligent naming based on subscription | Convention: `rg-mde-{sub}`, `aa-mde-{sub}`, etc. |
 | 3 | 📦 Resource Group with 8 corporate tags | `Microsoft.Resources/resourceGroups` |
-| 4 | 👥 Entra ID Security Group creation | `Microsoft Graph API` |
+| 4 | 👥 Entra ID Security Groups: main (active 7d), stale-7d, stale-30d | `Microsoft Graph API` |
 | 5 | ⚙️ Automation Account provisioning | `Microsoft.Automation/automationAccounts` |
 | 6 | 🔑 Managed Identity (Zero Trust) | `SystemAssigned` identity + retry logic |
 | 7 | 🛡️ RBAC Reader role assignment | Subscription-scoped Reader |
@@ -193,8 +195,12 @@ MDE-PolicyAutomation/
 │   └── 🔧 Deploy-MDE-Automation.ps1       ← 14-STAGE AUTONOMOUS DEPLOYMENT
 │
 ├── 📋 azure-policy/
-│   ├── 📄 policy-definition.json           ← Azure Policy (DeployIfNotExists)
-│   └── 🔧 Set-MDEDeviceTag.ps1            ← Registry config script (runs on VMs)
+│   ├── 📄 policy-definition.json           ← Azure Policy — Windows VMs (DeployIfNotExists)
+│   ├── 📄 policy-definition-linux.json     ← Azure Policy — Linux VMs
+│   ├── 📄 policy-definition-arc-windows.json ← Azure Policy — Arc Windows
+│   ├── 📄 policy-definition-arc-linux.json  ← Azure Policy — Arc Linux
+│   ├── 🔧 Set-MDEDeviceTag.ps1            ← Registry config script (Windows)
+│   └── 🔧 Set-MDEDeviceTag.sh             ← Managed JSON config script (Linux)
 │
 ├── docs/
 │   ├── 📄 QUICK-START.md                   ← 5-minute quick start
@@ -370,7 +376,6 @@ Once deployed, the system runs itself:
 
 | Feature | Description | ETA |
 |---------|-------------|-----|
-| 🐧 **Linux Policy Support** | Extend Azure Policy to cover Linux VMs (bash-based tag script) | Q3 2025 |
 | 🤖 **AI Agent Integration** | Autonomous agent for Device Group optimization and policy tuning | Q4 2025 |
 | 📊 **Compliance Dashboard** | HTML/PDF report with policy compliance status per subscription | Q3 2025 |
 | 🔗 **Multi-Tenant Support** | Lighthouse-compatible deployment across managed tenants | 2026 |
@@ -396,10 +401,10 @@ Once deployed, the system runs itself:
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 **Key areas where we'd love help:**
-- 🐧 Linux support for the device tag script (bash/shell equivalent)
-- 📊 Enhanced HTML reporting
+- � Enhanced HTML reporting
 - 🧪 Pester tests for validation stages
 - 📖 Documentation improvements
+- 🌐 Multi-tenant Lighthouse support
 
 ---
 

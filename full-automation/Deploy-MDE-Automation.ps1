@@ -8,10 +8,12 @@
     - Deep validation at every stage
     - Multi-platform (Windows + Cloud Shell)
     - Automatic resource detection and reuse
+    - Multi-platform policy coverage (Windows VM, Linux VM, Arc Windows, Arc Linux)
     - Resource Group with corporate tags
     - Automation Account with Managed Identity
     - RBAC Reader + Graph API permissions
-    - Entra ID Security Group creation
+    - Entra ID Security Groups: main (active last 7d), stale-7d (inactive 7+d), stale-30d (inactive 30+d)
+    - Automatic removal of ephemeral devices (VMs deleted from Azure)
     - Runbook + Schedule + Job Schedule
     - Azure Policy for device tagging (DeployIfNotExists)
     - MDE Device Groups (auto-generated HTML guide)
@@ -19,7 +21,7 @@
     - HTML report generation
     
 .NOTES
-    Version:  1.0.4 — Community Edition
+    Version:  1.2.0 — Community Edition
     Author:   Rafael França — github.com/rfranca777
     License:  MIT
     Project:  https://github.com/rfranca777/MDE-PolicyAutomation
@@ -76,7 +78,7 @@ Clear-Host
 Write-Host "`n============================================================" -ForegroundColor Magenta
 Write-Host "  MICROSOFT DEFENDER FOR ENDPOINT" -ForegroundColor White
 Write-Host "  Deployment Completo - 14 Stages - AUTOMACAO TOTAL" -ForegroundColor Gray
-Write-Host "  v1.0.4 - Full Automation Edition" -ForegroundColor Gray
+Write-Host "  v1.2.0 - Full Automation Edition" -ForegroundColor Gray
 Write-Host "============================================================`n" -ForegroundColor Magenta
 
 # ============================================================
@@ -133,11 +135,17 @@ $entraGroupName = "grp-mde-$subNameShort"
 $mdeDeviceGroupName = "mde-policy-$subNameShort"
 $scheduleName = "sch-mde-$subNameShort"
 $runbookName = "rb-mde-sync-$subNameShort"
-$policyName = "pol-mde-tag-$subNameShort"
+$policyName             = "pol-mde-tag-$subNameShort"
+$entraGroupStale7Name  = "grp-mde-$subNameShort-stale7"
+$entraGroupStale30Name = "grp-mde-$subNameShort-stale30"
+$mdeGroupStale7Name    = "mde-policy-$subNameShort-stale7"
+$mdeGroupStale30Name   = "mde-policy-$subNameShort-stale30"
 
 Write-ValidationStep "Resource Group: $resourceGroupName" "INFO"
 Write-ValidationStep "Automation Account: $automationAccountName" "INFO"
-Write-ValidationStep "Entra ID Group: $entraGroupName" "INFO"
+Write-ValidationStep "Entra Group (main): $entraGroupName" "INFO"
+Write-ValidationStep "Entra Group Stale-7d: $entraGroupStale7Name" "INFO"
+Write-ValidationStep "Entra Group Stale-30d: $entraGroupStale30Name" "INFO"
 Write-ValidationStep "MDE Device Group: $mdeDeviceGroupName" "INFO"
 Write-ValidationStep "Schedule: $scheduleName" "INFO"
 Write-ValidationStep "Runbook: $runbookName" "INFO"
@@ -247,6 +255,52 @@ if ($groupValidation) {
     Write-ValidationStep "Validacao: Grupo Entra ID falhou" "ERROR"
     exit 1
 }
+
+# Criar grupos Stale-7d e Stale-30d
+Write-Host "`n     Criando grupos de dispositivos inativos..." -ForegroundColor Cyan
+$groupIdStale7  = $null
+$groupIdStale30 = $null
+
+foreach ($staleGroupDef in @(
+    @{ Name = $entraGroupStale7Name;  Tag = "7";  Desc = "MDE Stale Devices (7d) - $subscriptionName - Inactive 7+ days" },
+    @{ Name = $entraGroupStale30Name; Tag = "30"; Desc = "MDE Stale Devices (30d) - $subscriptionName - Inactive 30+ days" }
+)) {
+    $sgName = $staleGroupDef.Name
+    $sgDesc = $staleGroupDef.Desc
+
+    $sgCheckResult = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$sgName'" -o json 2>$null | ConvertFrom-Json
+    if ($sgCheckResult -and $sgCheckResult.value.Count -gt 0) {
+        $sgId = $sgCheckResult.value[0].id
+        Write-ValidationStep "Grupo stale existente: $sgName (ID: $sgId)" "OK"
+    } else {
+        Write-ValidationStep "Criando grupo stale: $sgName..." "WAIT"
+        $sgMailNick = ($sgName -replace '[^a-zA-Z0-9]', '')
+        if ($sgMailNick.Length -gt 64) { $sgMailNick = $sgMailNick.Substring(0, 64) }
+        $sgJson = @{
+            displayName     = $sgName
+            mailNickname    = $sgMailNick
+            mailEnabled     = $false
+            securityEnabled = $true
+            description     = $sgDesc
+        } | ConvertTo-Json
+        $sgJsonFile = Join-Path $tempPath "stale-group-body.json"
+        $sgJson | Out-File $sgJsonFile -Encoding UTF8 -Force -NoNewline
+        $sgResult = az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups" --headers "Content-Type=application/json" --body "@$sgJsonFile" -o json 2>$null | ConvertFrom-Json
+        if ($sgResult -and $sgResult.id) {
+            $sgId = $sgResult.id
+            Write-ValidationStep "Grupo stale criado: $sgName (ID: $sgId)" "OK"
+        } else {
+            Write-ValidationStep "Falha ao criar grupo stale: $sgName" "ERROR"
+            $sgId = $null
+        }
+    }
+
+    if ($staleGroupDef.Tag -eq "7")  { $groupIdStale7  = $sgId }
+    if ($staleGroupDef.Tag -eq "30") { $groupIdStale30 = $sgId }
+}
+
+Write-ValidationStep "Grupo Stale-7d ID: $groupIdStale7" "INFO"
+Write-ValidationStep "Grupo Stale-30d ID: $groupIdStale30" "INFO"
 
 # ============================================================
 # ETAPA 5: AUTOMATION ACCOUNT
@@ -482,9 +536,9 @@ if ($permValidation) {
 }
 
 # ============================================================
-# ETAPA 9: MODULO Az.Accounts
+# ETAPA 9: MODULOS POWERSHELL
 # ============================================================
-Write-Host "`n[9/14] MODULO Az.Accounts" -ForegroundColor Cyan
+Write-Host "`n[9/14] MODULOS POWERSHELL (Az.Accounts + Az.ConnectedMachine)" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 Write-ValidationStep "Instalando modulo Az.Accounts..." "WAIT"
@@ -503,6 +557,22 @@ if ($LASTEXITCODE -eq 0) {
     Write-ValidationStep "Az.Accounts pode ja existir" "OK"
 }
 
+Write-ValidationStep "Instalando modulo Az.ConnectedMachine..." "WAIT"
+
+az automation module create `
+    --automation-account-name $automationAccountName `
+    --resource-group $resourceGroupName `
+    --name "Az.ConnectedMachine" `
+    --content-link uri="https://www.powershellgallery.com/api/v2/package/Az.ConnectedMachine" `
+    --output none 2>$null
+
+if ($LASTEXITCODE -eq 0) {
+    Write-ValidationStep "Az.ConnectedMachine instalacao iniciada" "OK"
+    Write-Host "     Necessario para suporte Azure Arc machines no runbook" -ForegroundColor Gray
+} else {
+    Write-ValidationStep "Az.ConnectedMachine pode ja existir" "OK"
+}
+
 # ============================================================
 # ETAPA 10: RUNBOOK
 # ============================================================
@@ -512,41 +582,65 @@ Write-Host "========================================================`n" -Foregro
 Write-ValidationStep "Gerando codigo do runbook..." "WAIT"
 
 $runbookCode = @'
-param($SubscriptionId,$GroupId,$IncludeArc=$true)
+param($SubscriptionId,$GroupId,$GroupIdStale7,$GroupIdStale30,$IncludeArc=$true)
 Write-Output "=== MDE Device Sync Started ==="
 Write-Output "Subscription: $SubscriptionId"
-Write-Output "Target Group: $GroupId"
-Write-Output "Include Arc: $IncludeArc"
+Write-Output "Main: $GroupId | Stale-7d: $GroupIdStale7 | Stale-30d: $GroupIdStale30 | Arc: $IncludeArc"
 Disable-AzContextAutosave -Scope Process|Out-Null
 try{Connect-AzAccount -Identity|Out-Null;Write-Output "Connected with Managed Identity"}catch{Write-Error "Failed to connect";exit 1}
 Set-AzContext -SubscriptionId $SubscriptionId|Out-Null
 $vms=Get-AzVM;$names=@($vms.Name)
 Write-Output "Azure VMs found: $($vms.Count)"
 if($IncludeArc){try{$arc=Get-AzConnectedMachine;$names+=$arc.Name;Write-Output "Arc Machines found: $($arc.Count)"}catch{Write-Output "No Arc machines or module not available"}}
-Write-Output "Total devices to sync: $($names.Count)"
+Write-Output "Total devices in subscription: $($names.Count)"
 $token=(Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com").Token
 $h=@{Authorization="Bearer $token";"Content-Type"="application/json"}
-$devs=@()
+$devsFull=@()
 Write-Output "Getting all Entra ID devices for matching..."
-$allDevsUri="https://graph.microsoft.com/v1.0/devices?`$select=id,displayName,deviceId"
+$allDevsUri="https://graph.microsoft.com/v1.0/devices?`$select=id,displayName,deviceId,approximateLastSignInDateTime"
 try{$allDevsResp=Invoke-RestMethod -Uri $allDevsUri -Headers $h -Method GET;$allDevices=$allDevsResp.value}catch{Write-Output "ERROR: Could not retrieve devices";exit 1}
 Write-Output "Total Entra ID devices available: $($allDevices.Count)"
+$now=[DateTime]::UtcNow;$t7=$now.AddDays(-7);$t30=$now.AddDays(-30)
 foreach($n in $names){
 Write-Output "Searching VM: $n"
 $matched=$allDevices|Where-Object{$_.displayName -eq $n -or $_.displayName.StartsWith($n) -or $n.StartsWith($_.displayName)}|Select-Object -First 1
-if($matched){$devs+=$matched.id;Write-Output "  MATCHED: $n -> $($matched.displayName) (DeviceId: $($matched.deviceId))"}else{Write-Output "  NOT FOUND: $n (not registered in Entra ID)"}}
-Write-Output "Entra ID devices found: $($devs.Count)"
-$gu="https://graph.microsoft.com/v1.0/groups/$GroupId/members"
-try{$c=Invoke-RestMethod -Uri $gu -Headers $h -Method GET;$cids=$c.value.id}catch{$cids=@();Write-Output "Group empty or not accessible"}
-Write-Output "Current group members: $($cids.Count)"
-$add=$devs|Where-Object{$_ -notin $cids}
-Write-Output "Devices to add: $($add.Count)"
-$cnt=0
-foreach($d in $add){
-$au="https://graph.microsoft.com/v1.0/groups/$GroupId/members/`$ref"
-$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json
-try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cnt++;Write-Output "Added device: $d"}catch{Write-Output "Failed to add: $d - $($_.Exception.Message)"}}
-Write-Output "=== Sync Complete: $cnt devices added ==="
+if($matched){$devsFull+=$matched;Write-Output "  MATCHED: $n -> $($matched.displayName) | LastSignIn: $($matched.approximateLastSignInDateTime)"}else{Write-Output "  NOT FOUND: $n (not in Entra ID)"}}
+Write-Output "Devices matched in Entra ID: $($devsFull.Count)"
+$devsActive=@($devsFull|Where-Object{$ls=$_.approximateLastSignInDateTime;if([string]::IsNullOrEmpty($ls)){$false}else{try{[DateTime]::Parse($ls) -ge $t7}catch{$false}}})
+$devsStale7=@($devsFull|Where-Object{$ls=$_.approximateLastSignInDateTime;if([string]::IsNullOrEmpty($ls)){$true}else{try{[DateTime]::Parse($ls) -lt $t7}catch{$true}}})
+$devsStale30=@($devsFull|Where-Object{$ls=$_.approximateLastSignInDateTime;if([string]::IsNullOrEmpty($ls)){$true}else{try{[DateTime]::Parse($ls) -lt $t30}catch{$true}}})
+Write-Output "Active (last 7d): $($devsActive.Count) | Stale-7+: $($devsStale7.Count) | Stale-30+: $($devsStale30.Count)"
+Write-Output "--- MAIN group: add active, remove ephemeral/stale ---"
+$gu="https://graph.microsoft.com/v1.0/groups/$GroupId/members?`$select=id"
+try{$c=Invoke-RestMethod -Uri $gu -Headers $h -Method GET;$cids=@($c.value.id)}catch{$cids=@();Write-Output "Main group empty"}
+Write-Output "Current main group members: $($cids.Count)"
+$activeIds=@($devsActive.id)
+$add=$activeIds|Where-Object{$_ -notin $cids};$cntA=0
+foreach($d in $add){$au="https://graph.microsoft.com/v1.0/groups/$GroupId/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cntA++;Write-Output "  MAIN +add: $d"}catch{Write-Output "  MAIN +fail: $d"}}
+$rem=$cids|Where-Object{$_ -notin $activeIds};$cntR=0
+foreach($d in $rem){$ru="https://graph.microsoft.com/v1.0/groups/$GroupId/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cntR++;Write-Output "  MAIN -rem: $d (ephemeral/stale)"}catch{Write-Output "  MAIN -fail: $d"}}
+Write-Output "Main group: +$cntA added, -$cntR removed"
+if(-not [string]::IsNullOrEmpty($GroupIdStale7)){
+Write-Output "--- STALE-7 group ---"
+$gs7="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members?`$select=id"
+try{$cs7=Invoke-RestMethod -Uri $gs7 -Headers $h -Method GET;$cids7=@($cs7.value.id)}catch{$cids7=@();Write-Output "Stale-7 group empty"}
+$s7ids=@($devsStale7.id)
+$addS7=$s7ids|Where-Object{$_ -notin $cids7};$cA7=0
+foreach($d in $addS7){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cA7++;Write-Output "  S7 +add: $d"}catch{Write-Output "  S7 +fail: $d"}}
+$remS7=$cids7|Where-Object{$_ -notin $s7ids};$cR7=0
+foreach($d in $remS7){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdStale7/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cR7++;Write-Output "  S7 -rem: $d (active again or gone)"}catch{Write-Output "  S7 -fail: $d"}}
+Write-Output "Stale-7 group: +$cA7 added, -$cR7 removed"}
+if(-not [string]::IsNullOrEmpty($GroupIdStale30)){
+Write-Output "--- STALE-30 group ---"
+$gs30="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members?`$select=id"
+try{$cs30=Invoke-RestMethod -Uri $gs30 -Headers $h -Method GET;$cids30=@($cs30.value.id)}catch{$cids30=@();Write-Output "Stale-30 group empty"}
+$s30ids=@($devsStale30.id)
+$addS30=$s30ids|Where-Object{$_ -notin $cids30};$cA30=0
+foreach($d in $addS30){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cA30++;Write-Output "  S30 +add: $d"}catch{Write-Output "  S30 +fail: $d"}}
+$remS30=$cids30|Where-Object{$_ -notin $s30ids};$cR30=0
+foreach($d in $remS30){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdStale30/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cR30++;Write-Output "  S30 -rem: $d (active again or gone)"}catch{Write-Output "  S30 -fail: $d"}}
+Write-Output "Stale-30 group: +$cA30 added, -$cR30 removed"}
+Write-Output "=== Sync Complete ==="
 '@
 
 $runbookFile = Join-Path $tempPath "runbook-sync.ps1"
@@ -692,9 +786,11 @@ $jobScheduleBodyObj = @{
             name = $runbookName
         }
         parameters = @{
-            SubscriptionId = $subscriptionId
-            GroupId = $groupId
-            IncludeArc = $includeArc
+            SubscriptionId  = $subscriptionId
+            GroupId         = $groupId
+            GroupIdStale7   = $groupIdStale7
+            GroupIdStale30  = $groupIdStale30
+            IncludeArc      = $includeArc
         }
     }
 }
@@ -720,24 +816,25 @@ Write-ValidationStep "Validacao: Job Schedule confirmado" "OK"
 Write-Host "`n[12/14] AZURE POLICY PARA TAGGING" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
-Write-ValidationStep "Criando Azure Policy..." "WAIT"
+Write-ValidationStep "Criando Azure Policy (VMs + Arc machines)..." "WAIT"
 
-$policyContent = '{"if":{"allOf":[{"field":"type","equals":"Microsoft.Compute/virtualMachines"},{"field":"tags[' + "'mde_device_id'" + ']","exists":"false"}]},"then":{"effect":"modify","details":{"roleDefinitionIds":["/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"],"operations":[{"operation":"addOrReplace","field":"tags[' + "'mde_device_id'" + ']","value":"[field(' + "'name'" + ')]"}]}}}'
+# Policy com anyOf para cobrir tanto VMs Azure quanto Azure Arc machines
+$policyContent = '{"if":{"allOf":[{"anyOf":[{"field":"type","equals":"Microsoft.Compute/virtualMachines"},{"field":"type","equals":"Microsoft.HybridCompute/machines"}]},{"field":"tags[' + "'mde_device_id'" + ']","exists":"false"}]},"then":{"effect":"modify","details":{"roleDefinitionIds":["/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"],"operations":[{"operation":"addOrReplace","field":"tags[' + "'mde_device_id'" + ']","value":"[field(' + "'name'" + ')]"}]}}}'
 
 $policyFile = Join-Path $tempPath "policy-def.json"
 $policyContent | Out-File $policyFile -Encoding UTF8 -Force -NoNewline
 
 az policy definition create `
     --name $policyName `
-    --display-name "MDE - Auto Tag VMs with Device ID" `
-    --description "Automatically tags VMs with mde_device_id for MDE integration" `
+    --display-name "MDE - Auto Tag VMs and Arc Machines with Device ID" `
+    --description "Automatically tags Azure VMs and Arc machines with mde_device_id for MDE integration" `
     --rules "@$policyFile" `
     --mode Indexed `
     --subscription $subscriptionId `
     --output none 2>$null
 
 if ($LASTEXITCODE -eq 0) {
-    Write-ValidationStep "Policy definition criada" "OK"
+    Write-ValidationStep "Policy definition criada (VMs + Arc)" "OK"
 } else {
     Write-ValidationStep "Policy pode ja existir" "OK"
 }
@@ -746,7 +843,7 @@ az policy assignment create `
     --name "$policyName-assignment" `
     --policy $policyName `
     --scope "/subscriptions/$subscriptionId" `
-    --display-name "MDE - Auto-tag VMs Assignment" `
+    --display-name "MDE - Auto-tag VMs and Arc Machines Assignment" `
     --output none 2>$null
 
 if ($LASTEXITCODE -eq 0) {
@@ -892,21 +989,35 @@ $mdeInstructionsHtml = @"
             serao automaticamente sincronizados para o MDE Device Group.
         </div>
 
-        <h2>ðŸ”„ Sincronizacao Automatica</h2>
+        <h2>ðŸ"„ Sincronizacao Automatica — 3 Grupos</h2>
         <p>O runbook <span class="value">$runbookName</span> executa a cada hora e automaticamente:</p>
         <ol>
-            <li>Busca todas as VMs Azure e Azure Arc machines da subscription</li>
-            <li>Localiza os devices correspondentes no Entra ID</li>
-            <li>Adiciona os devices ao grupo: <span class="value">$entraGroupName</span></li>
-            <li>MDE sincroniza automaticamente os devices do grupo para o Device Group</li>
+            <li>Lista todas as VMs Azure e Azure Arc machines da subscription</li>
+            <li>Localiza os devices no Entra ID incluindo <code>approximateLastSignInDateTime</code></li>
+            <li><strong>Grupo principal</strong> <span class="value">$entraGroupName</span>: apenas devices que existem na subscription E reportaram nos ultimos 7 dias. Remove automaticamente VMs apagadas (efemeros) e inativos.</li>
+            <li><strong>Grupo stale-7d</strong> <span class="value">$entraGroupStale7Name</span>: devices sem comunicacao ha 7+ dias. Remove automaticamente quando o device volta a comunicar.</li>
+            <li><strong>Grupo stale-30d</strong> <span class="value">$entraGroupStale30Name</span>: devices sem comunicacao ha 30+ dias (subconjunto do stale-7d).</li>
+            <li>MDE sincroniza cada grupo Entra ID com o MDE Device Group correspondente.</li>
         </ol>
+        <div class="info-box">
+            <strong>Criterio grupo principal:</strong> VM/Arc existe na subscription E <code>lastSignIn &gt;= hoje - 7 dias</code>.<br>
+            <strong>Remocao automatica:</strong> VM deletada do Azure e removida do grupo principal em menos de 1 hora.
+        </div>
 
-        <h2>ðŸ“Š Monitoramento</h2>
+        <h2>ðŸ–¥ Grupos MDE a Criar no Portal</h2>
+        <p>Crie 3 Device Groups em <a href="https://security.microsoft.com/securitysettings/endpoints/device_groups" target="_blank">security.microsoft.com</a>, vinculando os grupos Entra ID:</p>
+        <ul>
+            <li><strong>Principal:</strong> <span class="value">$mdeDeviceGroupName</span> &#8594; <span class="value">$entraGroupName</span></li>
+            <li><strong>Stale-7d:</strong> <span class="value">$mdeGroupStale7Name</span> &#8594; <span class="value">$entraGroupStale7Name</span></li>
+            <li><strong>Stale-30d:</strong> <span class="value">$mdeGroupStale30Name</span> &#8594; <span class="value">$entraGroupStale30Name</span></li>
+        </ul>
+
+        <h2>ðŸ"Š Monitoramento</h2>
         <p>Para verificar a sincronizacao:</p>
         <div class="command">az automation job list --automation-account-name $automationAccountName --resource-group $resourceGroupName --output table</div>
         
         <p>Para executar manualmente:</p>
-        <div class="command">az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId IncludeArc=$includeArc</div>
+        <div class="command">az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 IncludeArc=$includeArc</div>
 
         <h2>ðŸ”— Links Uteis</h2>
         <ul>
@@ -918,7 +1029,7 @@ $mdeInstructionsHtml = @"
 
         <div class="timestamp">
             ðŸ“… Gerado em: $(Get-Date -Format "dd/MM/yyyy HH:mm:ss")
-            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.0.4
+            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.2.0
             <br>ðŸ“¦ Subscription: $subscriptionName ($subscriptionId)
         </div>
     </div>
@@ -1310,8 +1421,12 @@ Write-Host "  Resource Group: $resourceGroupName" -ForegroundColor White
 Write-Host "  Location: $location" -ForegroundColor White
 Write-Host "  Automation Account: $automationAccountName" -ForegroundColor White
 Write-Host "  Managed Identity: $principalId" -ForegroundColor White
-Write-Host "  Entra Group: $entraGroupName (ID: $groupId)" -ForegroundColor White
+Write-Host "  Entra Group (main): $entraGroupName (ID: $groupId)" -ForegroundColor White
+Write-Host "  Entra Group Stale-7d: $entraGroupStale7Name (ID: $groupIdStale7)" -ForegroundColor White
+Write-Host "  Entra Group Stale-30d: $entraGroupStale30Name (ID: $groupIdStale30)" -ForegroundColor White
 Write-Host "  MDE Device Group: $mdeDeviceGroupName (manual setup required)" -ForegroundColor White
+Write-Host "  MDE Group Stale-7d: $mdeGroupStale7Name (manual setup required)" -ForegroundColor White
+Write-Host "  MDE Group Stale-30d: $mdeGroupStale30Name (manual setup required)" -ForegroundColor White
 Write-Host "  Runbook: $runbookName" -ForegroundColor White
 Write-Host "  Schedule: $scheduleName (proxima: $startTime)" -ForegroundColor White
 Write-Host "  Azure Policy: $policyName" -ForegroundColor White
@@ -1345,7 +1460,7 @@ Write-Host "  $(if ($appId) { '5' } else { '3' }). Aguarde primeira execucao aut
 
 Write-Host "`nCOMANDOS UTEIS:" -ForegroundColor Cyan
 Write-Host "  # Executar runbook manualmente:" -ForegroundColor Gray
-Write-Host "  az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId IncludeArc=$includeArc" -ForegroundColor White
+Write-Host "  az automation runbook start --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --parameters SubscriptionId=$subscriptionId GroupId=$groupId GroupIdStale7=$groupIdStale7 GroupIdStale30=$groupIdStale30 IncludeArc=$includeArc" -ForegroundColor White
 Write-Host ""
 Write-Host "  # Listar jobs:" -ForegroundColor Gray
 Write-Host "  az automation job list --automation-account-name $automationAccountName --resource-group $resourceGroupName --output table" -ForegroundColor White

@@ -1,0 +1,133 @@
+{
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "allOf": [
+        {
+          "field": "type",
+          "equals": "Microsoft.HybridCompute/machines"
+        },
+        {
+          "field": "Microsoft.HybridCompute/machines/osType",
+          "equals": "Windows"
+        }
+      ]
+    },
+    "then": {
+      "effect": "[parameters('effect')]",
+      "details": {
+        "type": "Microsoft.HybridCompute/machines/extensions",
+        "name": "MDEDeviceTagExtension",
+        "roleDefinitionIds": [
+          "/providers/Microsoft.Authorization/roleDefinitions/cd570a14-e51a-42ad-bac8-bafd67325302"
+        ],
+        "existenceCondition": {
+          "allOf": [
+            {
+              "field": "Microsoft.HybridCompute/machines/extensions/publisher",
+              "equals": "Microsoft.Compute"
+            },
+            {
+              "field": "Microsoft.HybridCompute/machines/extensions/type",
+              "equals": "CustomScriptExtension"
+            },
+            {
+              "field": "Microsoft.HybridCompute/machines/extensions/provisioningState",
+              "equals": "Succeeded"
+            }
+          ]
+        },
+        "deployment": {
+          "properties": {
+            "mode": "incremental",
+            "template": {
+              "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+              "contentVersion": "1.0.0.0",
+              "parameters": {
+                "machineName": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "tagValue": {
+                  "type": "string"
+                },
+                "scriptUri": {
+                  "type": "string"
+                }
+              },
+              "resources": [
+                {
+                  "type": "Microsoft.HybridCompute/machines/extensions",
+                  "apiVersion": "2022-12-27",
+                  "name": "[concat(parameters('machineName'), '/MDEDeviceTagExtension')]",
+                  "location": "[parameters('location')]",
+                  "properties": {
+                    "publisher": "Microsoft.Compute",
+                    "type": "CustomScriptExtension",
+                    "typeHandlerVersion": "1.10",
+                    "autoUpgradeMinorVersion": true,
+                    "settings": {
+                      "fileUris": [
+                        "[parameters('scriptUri')]"
+                      ]
+                    },
+                    "protectedSettings": {
+                      "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File Set-MDEDeviceTag.ps1 -TagValue ', parameters('tagValue'))]"
+                    }
+                  }
+                }
+              ]
+            },
+            "parameters": {
+              "machineName": {
+                "value": "[field('name')]"
+              },
+              "location": {
+                "value": "[field('location')]"
+              },
+              "tagValue": {
+                "value": "[parameters('tagValue')]"
+              },
+              "scriptUri": {
+                "value": "[parameters('scriptUri')]"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "parameters": {
+    "tagValue": {
+      "type": "String",
+      "metadata": {
+        "displayName": "MDE Device Tag Value",
+        "description": "The device tag value to apply to Azure Arc Windows machines for Microsoft Defender for Endpoint (e.g., DEV, PROD, TEST, STAGING)"
+      }
+    },
+    "scriptUri": {
+      "type": "String",
+      "metadata": {
+        "displayName": "Script URI",
+        "description": "URI of the Set-MDEDeviceTag.ps1 PowerShell script in an Azure Storage Account or publicly accessible repository"
+      }
+    },
+    "effect": {
+      "type": "String",
+      "defaultValue": "DeployIfNotExists",
+      "allowedValues": [
+        "DeployIfNotExists",
+        "AuditIfNotExists",
+        "Disabled"
+      ],
+      "metadata": {
+        "displayName": "Effect",
+        "description": "Enable or disable the execution of the policy"
+      }
+    }
+  },
+  "displayName": "Deploy MDE Device Tag to Azure Arc Windows Machines",
+  "description": "Automatically configures Microsoft Defender for Endpoint device tags on Azure Arc-enabled Windows machines by setting the required registry key via Custom Script Extension. The tag allows organizing devices into Device Groups in the MDE portal for applying specific antivirus and attack surface reduction policies. This policy uses DeployIfNotExists to apply the configuration to new and existing Arc Windows machines."
+}

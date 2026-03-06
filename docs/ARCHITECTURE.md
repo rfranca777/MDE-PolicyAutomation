@@ -6,18 +6,23 @@ MDE Policy Automation uses a **three-layer approach** to ensure complete device 
 
 ### Layer 1: Azure Policy (Infrastructure-Level)
 
-- **Mechanism**: `DeployIfNotExists` Azure Policy
-- **What it does**: Deploys a Custom Script Extension on every Windows VM
-- **Script**: `Set-MDEDeviceTag.ps1` configures the registry key
-- **Registry**: `HKLM:\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection\DeviceTagging\Group`
-- **Result**: MDE agent reads the tag and syncs it to the cloud
+- **Mechanism**: `DeployIfNotExists` Azure Policy (4 policy definitions)
+- **Targets**:
+  - **Windows VMs** (`policy-definition.json`): CustomScriptExtension → `Set-MDEDeviceTag.ps1` → Registry key
+  - **Linux VMs** (`policy-definition-linux.json`): CustomScript Extension → `Set-MDEDeviceTag.sh` → `mdatp_managed.json`
+  - **Arc Windows** (`policy-definition-arc-windows.json`): CustomScriptExtension → `Set-MDEDeviceTag.ps1` → Registry key
+  - **Arc Linux** (`policy-definition-arc-linux.json`): CustomScript Extension → `Set-MDEDeviceTag.sh` → `mdatp_managed.json`
+- **Windows Script**: `Set-MDEDeviceTag.ps1` configures `HKLM:\SOFTWARE\Policies\Microsoft\Windows Advanced Threat Protection\DeviceTagging\Group`
+- **Linux Script**: `Set-MDEDeviceTag.sh` configures `/etc/opt/microsoft/mdatp/managed/mdatp_managed.json` with `edr.tags[].GROUP`
+- **Result**: MDE agent reads the tag (registry on Windows, managed JSON on Linux) and syncs it to the cloud
 
 ### Layer 2: Azure Automation (Operational-Level)
 
 - **Mechanism**: Automation Account with SystemAssigned Managed Identity
 - **What it does**: Runs a PowerShell runbook every hour
-- **Runbook logic**: Discovers Azure VMs + Arc machines → matches Entra ID devices → adds to Security Group
-- **Result**: Entra ID group always reflects current Azure VM fleet
+- **Runbook logic**: Discovers Azure VMs (`Get-AzVM`) + Arc machines (`Get-AzConnectedMachine`) → matches Entra ID devices → adds to Security Group
+- **Required modules**: `Az.Accounts`, `Az.ConnectedMachine`
+- **Result**: Entra ID group always reflects current Azure VM + Arc machine fleet
 
 ### Layer 3: MDE Integration (Security-Level)
 

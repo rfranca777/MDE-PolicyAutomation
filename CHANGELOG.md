@@ -2,6 +2,51 @@
 
 All notable changes to MDE Policy Automation will be documented in this file.
 
+## [1.2.0] — 2026-03-06
+
+### Added
+- **Stale device groups**: Two new Entra ID Security Groups created automatically per subscription (Stage 4):
+  - `grp-mde-{sub}-stale7` — devices inactive for 7+ days
+  - `grp-mde-{sub}-stale30` — devices inactive for 30+ days
+- **Ephemeral device cleanup**: Main group now automatically removes devices whose VMs no longer exist in the subscription (deleted/decommissioned)
+- **Smart main group criteria**: Main group (`grp-mde-{sub}`) now contains only devices that (1) exist as VM/Arc in the subscription AND (2) reported (`approximateLastSignInDateTime`) within the last 7 days
+- **Bi-directional sync**: Runbook now adds AND removes members from all 3 groups every hour
+- Stage 4: stale-7d and stale-30d groups created with same idempotent detect/reuse pattern as main group
+- Stage 11: Job Schedule passes `GroupIdStale7` and `GroupIdStale30` parameters to runbook
+- Stage 13: HTML guide updated with 3-group architecture and instructions for creating all MDE Device Groups in portal
+
+### Changed
+- Runbook `param()` now accepts `$GroupIdStale7` and `$GroupIdStale30`
+- Runbook `$select` query extended with `approximateLastSignInDateTime`
+- Runbook classification: devices bucketed into `active`, `stale-7`, `stale-30` before any group sync
+- Report final shows all 5 groups (main + 2 stale Entra + 2 stale MDE) and updated manual run command
+- Version bumped to 1.2.0
+
+## [1.1.0] — 2026-03-03
+
+### Added
+- **Linux VM support**: Azure Policy (`policy-definition-linux.json`) deploys CustomScript extension to configure MDE device tags on Linux VMs via `mdatp_managed.json`
+- **Azure Arc Windows support**: Azure Policy (`policy-definition-arc-windows.json`) deploys CustomScriptExtension on Arc-enabled Windows machines
+- **Azure Arc Linux support**: Azure Policy (`policy-definition-arc-linux.json`) deploys CustomScript extension on Arc-enabled Linux machines
+- `Set-MDEDeviceTag.sh`: Bash script for MDE device tag configuration on Linux (Ubuntu, RHEL, CentOS, SLES, Debian, Oracle Linux, Amazon Linux 2, Fedora, Rocky, Alma)
+- `Az.ConnectedMachine` module installation in Stage 9 for reliable Azure Arc machine discovery in runbook
+- Stage 12 policy now covers both `Microsoft.Compute/virtualMachines` and `Microsoft.HybridCompute/machines` via `anyOf` condition
+
+### Changed
+- Stage 9 header updated to reflect dual module installation (Az.Accounts + Az.ConnectedMachine)
+- Stage 12 inline Modify policy expanded with `anyOf` to match both Azure VMs and Azure Arc machines
+- ARCHITECTURE.md Layer 1 updated to document 4 policy definitions (Windows VM, Linux VM, Arc Windows, Arc Linux)
+- ARCHITECTURE.md Layer 2 updated to document Az.ConnectedMachine module dependency
+- README.md: Linux Policy Support moved from Roadmap to implemented features
+- README.md: Project structure updated with new files
+- Version bumped to 1.1.0
+
+### Security
+- `Set-MDEDeviceTag.sh` uses Python `sys.argv` for safe argument passing (no shell interpolation)
+- `Set-MDEDeviceTag.sh` uses atomic write (temp file + rename) to prevent config corruption
+- `Set-MDEDeviceTag.sh` validates tag length (max 200 chars per MDE specification)
+- Arc policies use `Azure Connected Machine Resource Administrator` role (minimum privilege for extension deployment)
+
 ## [1.0.4] — 2026-01-29
 
 ### Added
