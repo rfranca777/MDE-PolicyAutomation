@@ -640,8 +640,8 @@ try{$ceR=Invoke-RestMethod -Uri $geUri -Headers $h -Method GET;$cidsEph=@($ceR.v
 $allDeviceIds=@($allDevices.id)
 $addEph=$ephemeralFromMain|Where-Object{$_ -notin $cidsEph};$cAE=0
 foreach($d in $addEph){$au="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/`$ref";$b=@{"@odata.id"="https://graph.microsoft.com/v1.0/devices/$d"}|ConvertTo-Json;try{Invoke-RestMethod -Uri $au -Method POST -Headers $h -Body $b|Out-Null;$cAE++;Write-Output "  EPH +add: $d (VM destroyed)"}catch{Write-Output "  EPH +fail: $d"}}
-$remEph=$cidsEph|Where-Object{$_ -notin $allDeviceIds -or $_ -in $allMatchedIds};$cRE=0
-foreach($d in $remEph){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cRE++;Write-Output "  EPH -rem: $d (Entra ID gone or VM reappeared)"}catch{Write-Output "  EPH -fail: $d"}}
+$remEph=$cidsEph|Where-Object{$_ -notin $allDeviceIds};$cRE=0
+foreach($d in $remEph){$ru="https://graph.microsoft.com/v1.0/groups/$GroupIdEphemeral/members/$d/`$ref";try{Invoke-RestMethod -Uri $ru -Method DELETE -Headers $h|Out-Null;$cRE++;Write-Output "  EPH -rem: $d (Entra ID record expired/deleted)"}catch{Write-Output "  EPH -fail: $d"}}
 Write-Output "Ephemeral group: +$cAE added, -$cRE removed"}
 if(-not [string]::IsNullOrEmpty($GroupIdStale7)){
 Write-Output "--- STALE-7 group ---"
