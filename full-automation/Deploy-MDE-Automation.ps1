@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     MDE Policy Automation — 14-Stage Autonomous Deployment
     
@@ -22,7 +22,7 @@
     - HTML report generation
     
 .NOTES
-    Version:  1.4.0 — Community Edition
+    Version:  1.4.1 — Community Edition
     Author:   Rafael França — github.com/rfranca777
     License:  MIT
     Project:  https://github.com/rfranca777/MDE-PolicyAutomation
@@ -79,7 +79,7 @@ Clear-Host
 Write-Host "`n============================================================" -ForegroundColor Magenta
 Write-Host "  MICROSOFT DEFENDER FOR ENDPOINT" -ForegroundColor White
 Write-Host "  Deployment Completo - 14 Stages - AUTOMACAO TOTAL" -ForegroundColor Gray
-Write-Host "  v1.4.0 - Full Automation Edition" -ForegroundColor Gray
+Write-Host "  v1.4.1 - Full Automation Edition" -ForegroundColor Gray
 Write-Host "============================================================`n" -ForegroundColor Magenta
 
 # ============================================================
@@ -1125,7 +1125,7 @@ $mdeInstructionsHtml = @"
 
         <div class="timestamp">
             ðŸ“… Gerado em: $(Get-Date -Format "dd/MM/yyyy HH:mm:ss")
-            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.4.0
+            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.4.1
             <br>ðŸ“¦ Subscription: $subscriptionName ($subscriptionId)
         </div>
     </div>
