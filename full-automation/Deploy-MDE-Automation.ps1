@@ -246,7 +246,7 @@ if ($existingRg) {
         Write-ValidationStep "Resource Group criado com sucesso" "OK"
     } else {
         Write-ValidationStep "Falha ao criar Resource Group" "ERROR"
-        exit 1
+        continue
     }
 }
 
@@ -255,7 +255,7 @@ if ($rgValidation) {
     Write-ValidationStep "Validacao: Resource Group confirmado" "OK"
 } else {
     Write-ValidationStep "Validacao: Resource Group falhou" "ERROR"
-    exit 1
+    continue
 }
 
 # ============================================================
@@ -297,16 +297,16 @@ if ($groupCheck) {
                 Write-ValidationStep "Grupo criado (ID: $groupId)" "OK"
             } else {
                 Write-ValidationStep "Falha ao criar grupo - Verifique permissoes Graph API" "ERROR"
-                exit 1
+                continue
             }
         } else {
             Write-ValidationStep "Falha ao criar grupo - Verifique permissoes Graph API" "ERROR"
-            exit 1
+            continue
         }
     }
 } else {
     Write-ValidationStep "Erro ao consultar Graph API" "ERROR"
-    exit 1
+    continue
 }
 
 $groupValidation = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$groupId" -o json 2>$null
@@ -314,7 +314,7 @@ if ($groupValidation) {
     Write-ValidationStep "Validacao: Grupo Entra ID confirmado" "OK"
 } else {
     Write-ValidationStep "Validacao: Grupo Entra ID falhou" "ERROR"
-    exit 1
+    continue
 }
 
 # Criar grupos Stale-7d e Stale-30d
@@ -417,7 +417,7 @@ if (-not $existingAA -or -not $existingAA.id) {
         Write-ValidationStep "Automation Account criado com sucesso" "OK"
     } else {
         Write-ValidationStep "Falha ao criar Automation Account" "ERROR"
-        exit 1
+        continue
     }
 }
 
@@ -426,7 +426,7 @@ if ($aaValidation) {
     Write-ValidationStep "Validacao: Automation Account confirmado" "OK"
 } else {
     Write-ValidationStep "Validacao: Automation Account falhou" "ERROR"
-    exit 1
+    continue
 }
 
 # ============================================================
@@ -441,7 +441,7 @@ Write-Host "     Debug - Subscription: $subscriptionId" -ForegroundColor Gray
 
 if ([string]::IsNullOrWhiteSpace($automationAccountName)) {
     Write-ValidationStep "ERRO CRITICO: automationAccountName esta vazio!" "ERROR"
-    exit 1
+    continue
 }
 
 Write-ValidationStep "Aguardando propagacao inicial do Automation Account..." "WAIT"
@@ -511,7 +511,7 @@ if (-not $principalId) {
     Write-Host "  az automation account update --name $automationAccountName --resource-group $resourceGroupName --set identity.type=SystemAssigned" -ForegroundColor White
     Write-Host "`n  [SOLUCAO 2] Via REST API:" -ForegroundColor Yellow
     Write-Host "  az rest --method PATCH --uri '$identityUri' --body '$identityBody'" -ForegroundColor White
-    exit 1
+    continue
 }
 
 Write-ValidationStep "Aguardando propagacao do Principal ID (30s)..." "WAIT"
@@ -565,7 +565,7 @@ $graphSP = az ad sp list --filter "displayName eq 'Microsoft Graph'" --query "[0
 
 if (-not $graphSP) {
     Write-ValidationStep "Falha ao obter Microsoft Graph SP" "ERROR"
-    exit 1
+    continue
 }
 
 Write-ValidationStep "Microsoft Graph SP: $graphSP" "OK"
@@ -751,7 +751,7 @@ $existingRunbook = az automation runbook show --name $runbookName --automation-a
 
 if ($existingRunbook) {
     Write-ValidationStep "Runbook existente detectado (State: $($existingRunbook.state))" "OK"
-    Write-ValidationStep "Atualizando runbook com codigo v1.4.0..." "WAIT"
+    Write-ValidationStep "Atualizando runbook com codigo v1.4.1..." "WAIT"
 } else {
     Write-ValidationStep "Criando novo runbook..." "WAIT"
     
@@ -784,7 +784,7 @@ if ($existingRunbook) {
         Write-ValidationStep "Runbook definition criada" "OK"
     } else {
         Write-ValidationStep "Erro ao criar runbook: $rbCreateResponse" "ERROR"
-        exit 1
+        continue
     }
     
     Start-Sleep -Seconds 5
@@ -800,7 +800,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-ValidationStep "Runbook content uploaded" "OK"
 } else {
     Write-ValidationStep "Erro ao fazer upload: $contentResponse" "ERROR"
-    exit 1
+    continue
 }
 
 Start-Sleep -Seconds 5
@@ -814,7 +814,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-ValidationStep "Runbook publicado" "OK"
 } else {
     Write-ValidationStep "Erro ao publicar: $pubResponse" "ERROR"
-    exit 1
+    continue
 }
 Start-Sleep -Seconds 3
 
@@ -826,7 +826,7 @@ if ($rbValidation -and $rbValidation.State -eq "Published") {
     Write-ValidationStep "Runbook validado (State: Published)" "OK"
 } else {
     Write-ValidationStep "Runbook nao publicado corretamente (State: $($rbValidation.State))" "ERROR"
-    exit 1
+    continue
 }
 
 # ============================================================
@@ -862,7 +862,7 @@ if ($schedValidation) {
     Write-ValidationStep "Validacao: Schedule confirmado" "OK"
 } else {
     Write-ValidationStep "Validacao: Schedule falhou" "ERROR"
-    exit 1
+    continue
 }
 
 Write-ValidationStep "Vinculando runbook ao schedule..." "WAIT"
@@ -896,7 +896,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-ValidationStep "Job Schedule linkado" "OK"
 } else {
     Write-ValidationStep "Erro ao linkar Job Schedule: $jsResponse" "ERROR"
-    exit 1
+    continue
 }
 
 Start-Sleep -Seconds 3
