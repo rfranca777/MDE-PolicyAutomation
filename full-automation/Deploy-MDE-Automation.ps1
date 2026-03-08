@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     MDE Policy Automation — 14-Stage Autonomous Deployment
     
@@ -96,7 +96,7 @@ if (-not $currentContext) {
 
 Write-ValidationStep "Autenticado: $($currentContext.user.name)" "OK"
 
-$subscriptions = az account list --query "[].{Name:name, Id:id, State:state}" -o json | ConvertFrom-Json | Where-Object { $_.State -eq "Enabled" }
+$subscriptions = @(az account list --query "[].{Name:name, Id:id, State:state}" -o json | ConvertFrom-Json | Where-Object { $_.State -eq "Enabled" })
 
 if ($subscriptions.Count -eq 0) {
     Write-ValidationStep "Nenhuma subscription ativa encontrada" "ERROR"
@@ -115,7 +115,9 @@ if ($selInput -eq "all" -or $selInput -eq "ALL" -or $selInput -eq "todos") {
     $selectedSubs = $subscriptions
 } else {
     foreach ($s in ($selInput -split ',')) {
-        $idx = [int]$s.Trim() - 1
+        $trimmed = $s.Trim()
+        $idx = -1
+        if ($trimmed -match '^\d+$') { $idx = [int]$trimmed - 1 }
         if ($idx -ge 0 -and $idx -lt $subscriptions.Count) {
             $selectedSubs += $subscriptions[$idx]
         }
