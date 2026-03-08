@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     MDE Policy Automation — 14-Stage Autonomous Deployment
     
@@ -238,7 +238,7 @@ $existingRg = az group show --name $resourceGroupName 2>$null | ConvertFrom-Json
 if ($existingRg) {
     Write-ValidationStep "Resource Group existente detectado" "WAIT"
     az group update --name $resourceGroupName --tags $tags --output none 2>$null
-    Write-ValidationStep "Tags atualizadas (8 tags corporativas)" "OK"
+    Write-ValidationStep "Tags atualizadas ($($defaultTags.Count) tags)" "OK"
 } else {
     Write-ValidationStep "Criando Resource Group..." "WAIT"
     az group create --name $resourceGroupName --location $location --tags $tags --output none 2>$null
@@ -385,8 +385,21 @@ if ($aaShowResult -and $LASTEXITCODE -eq 0) {
 }
 
 if ($existingAA -and $existingAA.id) {
-    Write-ValidationStep "Automation Account existente reutilizado" "OK"
-} else {
+    Write-ValidationStep "Automation Account existente detectado: $automationAccountName" "WAIT"
+    Write-Host "     Deseja reutilizar? [ENTER=SIM | N=criar novo (vai apagar o atual)]" -NoNewline -ForegroundColor Yellow
+    Write-Host ": " -NoNewline -ForegroundColor Cyan
+    $reuseAA = Read-Host
+    if ($reuseAA -eq "N" -or $reuseAA -eq "n") {
+        Write-ValidationStep "Removendo Automation Account antigo..." "WAIT"
+        az automation account delete --name $automationAccountName --resource-group $resourceGroupName --yes --output none 2>$null
+        Start-Sleep -Seconds 5
+        $existingAA = $null
+    } else {
+        Write-ValidationStep "Automation Account reutilizado" "OK"
+    }
+}
+
+if (-not $existingAA -or -not $existingAA.id) {
     Write-ValidationStep "Criando Automation Account..." "WAIT"
     Write-Host "     Nome: $automationAccountName" -ForegroundColor Gray
     Write-Host "     RG: $resourceGroupName" -ForegroundColor Gray
@@ -738,7 +751,7 @@ $existingRunbook = az automation runbook show --name $runbookName --automation-a
 
 if ($existingRunbook) {
     Write-ValidationStep "Runbook existente detectado (State: $($existingRunbook.state))" "OK"
-    Write-ValidationStep "Atualizando runbook com codigo v1.3.0..." "WAIT"
+    Write-ValidationStep "Atualizando runbook com codigo v1.4.0..." "WAIT"
 } else {
     Write-ValidationStep "Criando novo runbook..." "WAIT"
     
@@ -1112,7 +1125,7 @@ $mdeInstructionsHtml = @"
 
         <div class="timestamp">
             ðŸ“… Gerado em: $(Get-Date -Format "dd/MM/yyyy HH:mm:ss")
-            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.3.0
+            <br>ðŸ”§ Script: Deploy-MDE-Automation.ps1 v1.4.0
             <br>ðŸ“¦ Subscription: $subscriptionName ($subscriptionId)
         </div>
     </div>
