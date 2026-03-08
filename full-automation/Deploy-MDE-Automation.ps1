@@ -513,7 +513,7 @@ if (-not $principalId) {
     Write-Host "`n  [SOLUCAO 1] Aguarde 2-3 minutos e execute:" -ForegroundColor Yellow
     Write-Host "  az automation account update --name $automationAccountName --resource-group $resourceGroupName --set identity.type=SystemAssigned" -ForegroundColor White
     Write-Host "`n  [SOLUCAO 2] Via REST API:" -ForegroundColor Yellow
-    Write-Host "  az rest --method PATCH --uri '$identityUri' --body '$identityBody'" -ForegroundColor White
+    Write-Host "  az rest --method PATCH --uri '$identityUri' --body '@$identityBodyFile'" -ForegroundColor White
     continue
 }
 
@@ -1595,8 +1595,96 @@ Write-Host "`n============================================================`n" -F
 
 } # FIM DO LOOP FOREACH SUBSCRIPTION
 
+# ============================================================
+# REPORT FINAL HTML INTELIGENTE
+# ============================================================
+$reportHtml = @"
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>MDE Policy Automation - Deployment Report</title>
+<style>
+body{font-family:'Segoe UI',sans-serif;margin:30px;background:#f0f2f5}
+.container{max-width:1100px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+h1{color:#0078d4;border-bottom:3px solid #0078d4;padding-bottom:8px}
+h2{color:#106ebe;margin-top:25px}
+table{border-collapse:collapse;width:100%;margin:10px 0}
+th{background:#0078d4;color:#fff;padding:10px;text-align:left}
+td{padding:8px 10px;border-bottom:1px solid #e0e0e0}
+tr:nth-child(even){background:#f8f9fa}
+.ok{color:#107c10;font-weight:bold}
+.warn{color:#ffb900;font-weight:bold}
+.err{color:#d13438;font-weight:bold}
+.tag{background:#e8f4fd;padding:2px 8px;border-radius:3px;font-family:Consolas,monospace;font-size:13px}
+.ts{color:#666;font-size:12px;margin-top:20px;padding-top:15px;border-top:1px solid #ddd}
+</style></head><body><div class="container">
+<h1>&#128737; MDE Policy Automation — Deployment Report</h1>
+<p><strong>Gerado:</strong> $(Get-Date -Format "dd/MM/yyyy HH:mm:ss") | <strong>Versao:</strong> v1.4.1 | <strong>Subscriptions:</strong> $($selectedSubs.Count)</p>
+
+<h2>&#128203; Subscriptions Processadas</h2>
+<table><tr><th>#</th><th>Subscription</th><th>ID</th></tr>
+$(
+$idx=0
+foreach($s in $selectedSubs){
+$idx++
+"<tr><td>$idx</td><td>$($s.Name)</td><td><span class='tag'>$($s.Id)</span></td></tr>"
+}
+)
+</table>
+
+<h2>&#9881; Configuracao Global</h2>
+<table><tr><th>Parametro</th><th>Valor</th></tr>
+<tr><td>Location</td><td>$location</td></tr>
+<tr><td>Azure Arc</td><td>$(if($includeArc){'Habilitado'}else{'Desabilitado'})</td></tr>
+<tr><td>Tags</td><td>$($defaultTags.Count) tags configuradas</td></tr>
+</table>
+
+<h2>&#127991; Tags Aplicadas</h2>
+<table><tr><th>Key</th><th>Value</th></tr>
+$(foreach($t in $defaultTags.GetEnumerator()){"<tr><td>$($t.Key)</td><td><span class='tag'>$($t.Value)</span></td></tr>"})
+</table>
+
+<h2>&#128736; Recursos por Subscription</h2>
+<p>Cada subscription recebeu os seguintes recursos:</p>
+<table><tr><th>Recurso</th><th>Padrao de Nome</th></tr>
+<tr><td>Resource Group</td><td><span class='tag'>rg-mde-{sub}</span></td></tr>
+<tr><td>Automation Account</td><td><span class='tag'>aa-mde-{sub}</span></td></tr>
+<tr><td>Entra Group (main)</td><td><span class='tag'>grp-mde-{sub}</span></td></tr>
+<tr><td>Entra Group Stale-7d</td><td><span class='tag'>grp-mde-{sub}-stale7</span></td></tr>
+<tr><td>Entra Group Stale-30d</td><td><span class='tag'>grp-mde-{sub}-stale30</span></td></tr>
+<tr><td>Entra Group Ephemeral</td><td><span class='tag'>grp-mde-{sub}-ephemeral</span></td></tr>
+<tr><td>Runbook</td><td><span class='tag'>rb-mde-sync-{sub}</span></td></tr>
+<tr><td>Schedule</td><td><span class='tag'>sch-mde-{sub}</span> (hourly)</td></tr>
+<tr><td>Azure Policy</td><td><span class='tag'>pol-mde-tag-{sub}</span></td></tr>
+<tr><td>MDE App Registration</td><td><span class='tag'>MDE-Automation-{sub}</span></td></tr>
+</table>
+
+<h2>&#128640; Proximos Passos</h2>
+<ol>
+<li>Acesse <a href="https://security.microsoft.com/securitysettings/endpoints/device_groups" target="_blank">MDE Device Groups</a> e crie 4 Device Groups por subscription</li>
+<li>Conceda Admin Consent para cada App Registration criada</li>
+<li>Aguarde a primeira execucao automatica do runbook (1h)</li>
+<li>Monitore jobs: <code>az automation job list --automation-account-name aa-mde-{sub} --resource-group rg-mde-{sub} -o table</code></li>
+</ol>
+
+<h2>&#128208; Arquitectura dos 4 Grupos</h2>
+<table><tr><th>Grupo</th><th>Criterio</th><th>Remocao</th></tr>
+<tr><td><strong>Main</strong></td><td>VM existe E lastSignIn &ge; 7 dias</td><td>VM apagada ou inactiva</td></tr>
+<tr><td><strong>Stale-7d</strong></td><td>VM existe E lastSignIn &lt; 7 dias</td><td>Device volta activo</td></tr>
+<tr><td><strong>Stale-30d</strong></td><td>VM existe E lastSignIn &lt; 30 dias</td><td>Device volta activo</td></tr>
+<tr><td><strong>Ephemeral</strong></td><td>VM ja nao existe em Azure</td><td>Apenas quando Entra ID expira</td></tr>
+</table>
+
+<div class="ts">MDE Policy Automation v1.4.1 — ODefender Community — $(Get-Date -Format "yyyy")</div>
+</div></body></html>
+"@
+
+$reportPath = Join-Path $tempPath "MDE-Deployment-Report.html"
+$reportHtml | Out-File $reportPath -Encoding UTF8 -Force
+Write-Host "`n  Report HTML gerado: $reportPath" -ForegroundColor Cyan
+Start-Process $reportPath
+
 Write-Host "`n============================================================" -ForegroundColor Green
 Write-Host "  DEPLOYMENT GLOBAL CONCLUIDO!" -ForegroundColor White
 Write-Host "  Subscriptions processadas: $($selectedSubs.Count)" -ForegroundColor Gray
 foreach ($ss in $selectedSubs) { Write-Host "     - $($ss.Name)" -ForegroundColor Gray }
+Write-Host "  Report: $reportPath" -ForegroundColor Cyan
 Write-Host "============================================================`n" -ForegroundColor Green
