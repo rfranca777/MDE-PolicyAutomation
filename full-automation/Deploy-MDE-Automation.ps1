@@ -1285,8 +1285,11 @@ if ($appId) {
                 if ($LASTEXITCODE -eq 0) {
                     Write-ValidationStep "Admin consent concedido automaticamente!" "OK"
                     $consentGranted = $true
+                } elseif ($consentResult -match "already exists") {
+                    Write-ValidationStep "Admin consent ja estava concedido!" "OK"
+                    $consentGranted = $true
                 } else {
-                    Write-ValidationStep "Consent pode ja existir ou requer Global Admin" "WAIT"
+                    Write-ValidationStep "Consent falhou — pode requerer Global Admin" "WAIT"
                     Write-Host "     $consentResult" -ForegroundColor Gray
                     $consentGranted = $false
                 }
@@ -1410,7 +1413,7 @@ Write-Host "========================================`n" -ForegroundColor Green
 Write-Host "Resumo:" -ForegroundColor Cyan
 Write-Host "  Total de devices: `$(`$machines.Count)" -ForegroundColor White
 Write-Host "  Tags aplicadas: `$successCount" -ForegroundColor Green
-Write-Host "  Erros: `$errorCount" -ForegroundColor $(if (`$errorCount -gt 0) { "Red" } else { "Gray" })
+Write-Host "  Erros: `$errorCount" -ForegroundColor `$(if (`$errorCount -gt 0) { "Red" } else { "Gray" })
 Write-Host "  Tag aplicada: `$subscriptionTag" -ForegroundColor Cyan
 Write-Host ""
 "@
