@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 120">
+  <defs>
+    <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00c2ff" />
+      <stop offset="50%" style="stop-color:#0078d4" />
+      <stop offset="100%" style="stop-color:#5b2dff" />
+    </linearGradient>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a" />
+      <stop offset="100%" style="stop-color:#0d1b2a" />
+    </linearGradient>
+    <filter id="g"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="600" height="120" rx="12" fill="url(#bg)"/>
+  <rect width="600" height="120" rx="12" fill="none" stroke="url(#sg)" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Shield icon (left) -->
+  <g transform="translate(20, 10)">
+    <path d="M50 5 L90 22 L90 55 C90 78 74 92 50 100 C26 92 10 78 10 55 L10 22 Z" 
+          fill="url(#sg)" opacity="0.95" filter="url(#g)"/>
+    <path d="M50 16 L80 30 L80 54 C80 72 68 82 50 88 C32 82 20 72 20 54 L20 30 Z" 
+          fill="#0a0a1a" opacity="0.9"/>
+    <circle cx="50" cy="48" r="14" fill="none" stroke="#00c2ff" stroke-width="3" filter="url(#g)"/>
+    <circle cx="50" cy="48" r="5" fill="#00c2ff" opacity="0.9"/>
+    <circle cx="50" cy="48" r="2" fill="#fff"/>
+    <line x1="50" y1="30" x2="50" y2="37" stroke="#00e5ff" stroke-width="1" opacity="0.5"/>
+    <line x1="50" y1="59" x2="50" y2="66" stroke="#00e5ff" stroke-width="1" opacity="0.5"/>
+    <line x1="32" y1="48" x2="39" y2="48" stroke="#00e5ff" stroke-width="1" opacity="0.5"/>
+    <line x1="61" y1="48" x2="68" y2="48" stroke="#00e5ff" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <!-- Text -->
+  <text x="130" y="55" font-family="'Segoe UI', Arial, sans-serif" font-size="36" font-weight="100" fill="#ffffff" letter-spacing="2">
+    <tspan fill="#00c2ff" font-weight="700">O</tspan>Defender
+  </text>
+  <text x="130" y="80" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="300" fill="#00c2ff" letter-spacing="4" opacity="0.7">
+    COMMUNITY EDITION
+  </text>
+  
+  <!-- Tagline -->
+  <text x="130" y="102" font-family="'Segoe UI', Arial, sans-serif" font-size="11" font-weight="300" fill="#888888" letter-spacing="1">
+    Security Automation for Microsoft Defender for Endpoint
+  </text>
+</svg>
