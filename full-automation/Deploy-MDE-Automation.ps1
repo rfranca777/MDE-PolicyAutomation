@@ -177,7 +177,7 @@ if (-not [string]::IsNullOrWhiteSpace($tagInput)) {
         }
     }
 }
-$tags = ($defaultTags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '
+$tags = ($defaultTags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value -replace ' ', '_')" }) -join ' '
 Write-ValidationStep "Tags configuradas: $($defaultTags.Count) tags" "OK"
 
 # ============================================================
@@ -202,6 +202,7 @@ Write-Host "`n[2/14] NOMENCLATURA INTELIGENTE" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 $subNameClean = $subscriptionName -replace '[^a-zA-Z0-9-]', '-' -replace '--+', '-' -replace '^-|-$', ''
+if ([string]::IsNullOrWhiteSpace($subNameClean)) { $subNameClean = "sub-$($subscriptionId.Substring(0, 8))" }
 $subNameShort = $subNameClean.Substring(0, [Math]::Min(40, $subNameClean.Length)).ToLower()
 
 $resourceGroupName = "rg-mde-$subNameShort"
