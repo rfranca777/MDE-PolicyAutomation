@@ -1205,10 +1205,15 @@ if ($appId) {
             $consentGranted = $false
         } else {
             Write-ValidationStep "WindowsDefenderATP encontrado no tenant" "OK"
-            Write-ValidationStep "Adicionando permissao WindowsDefenderATP..." "WAIT"
-        
-        # WindowsDefenderATP Resource App ID: fc780465-2017-40d4-a0c5-307022471b92
-        # Machine.ReadWrite.All App Role ID: 7b5b1b6f-35f7-4a9e-a077-3be7e992fa8c
+            
+            # Obter o appRoleId real de Machine.ReadWrite.All (varia por tenant)
+            $mdeRoleId = az ad sp show --id "fc780465-2017-40d4-a0c5-307022471b92" --query "appRoles[?value=='Machine.ReadWrite.All'].id" -o tsv 2>$null
+            if (-not $mdeRoleId) {
+                Write-ValidationStep "Role Machine.ReadWrite.All nao encontrada no SP" "ERROR"
+                $consentGranted = $false
+            } else {
+                Write-ValidationStep "Machine.ReadWrite.All Role ID: $mdeRoleId" "OK"
+                Write-ValidationStep "Adicionando permissao WindowsDefenderATP..." "WAIT"
         
         $permissionBody = @{
             requiredResourceAccess = @(
@@ -1216,7 +1221,7 @@ if ($appId) {
                     resourceAppId = "fc780465-2017-40d4-a0c5-307022471b92"
                     resourceAccess = @(
                         @{
-                            id = "7b5b1b6f-35f7-4a9e-a077-3be7e992fa8c"
+                            id = $mdeRoleId
                             type = "Role"
                         }
                     )
@@ -1274,6 +1279,7 @@ if ($appId) {
             Write-ValidationStep "Erro ao adicionar permissao" "ERROR"
             $consentGranted = $false
         }
+        } # fim do else mdeRoleId
         } # fim do else mdeSpCheck
         
         # Criar script PowerShell para tagging MDE
