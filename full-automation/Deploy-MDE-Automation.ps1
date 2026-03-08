@@ -1256,38 +1256,38 @@ if ($appId) {
         if ($LASTEXITCODE -eq 0) {
             Write-ValidationStep "Permissao WindowsDefenderATP adicionada" "OK"
             
-            # AUTOMACAO: Conceder admin consent automaticamente
-            Write-Host "`n     CONSENTIMENTO DE ADMINISTRADOR NECESSARIO" -ForegroundColor Yellow
-            Write-Host "     ================================================" -ForegroundColor Yellow
+            # AUTOMACAO: Conceder admin consent via CLI (sem browser)
+            Write-ValidationStep "Concedendo admin consent via Graph API..." "WAIT"
             
-            $consentUrl = "https://login.microsoftonline.com/$tenantId/adminconsent?client_id=$appId"
-            
-            Write-Host "`n     Abrindo navegador para consentimento..." -ForegroundColor Cyan
-            Write-Host "     URL: $consentUrl" -ForegroundColor Gray
-            
-            # Abrir navegador automaticamente
-            Start-Process $consentUrl
-            
-            Write-Host "`n     [AGUARDANDO] Por favor, conceda o consentimento no navegador." -ForegroundColor Yellow
-            Write-Host "     Apos conceder o consentimento, pressione qualquer tecla para continuar..." -ForegroundColor Cyan
-            
-            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-            
-            Write-Host "`n     Validando consentimento..." -ForegroundColor Cyan
-            Start-Sleep -Seconds 5
-            
-            # Verificar se o consentimento foi concedido
             $servicePrincipalId = az ad sp list --filter "appId eq '$appId'" --query "[0].id" -o tsv 2>$null
+            if (-not $servicePrincipalId) {
+                Write-ValidationStep "Criando Service Principal para consent..." "WAIT"
+                az ad sp create --id $appId --output none 2>$null
+                Start-Sleep -Seconds 5
+                $servicePrincipalId = az ad sp list --filter "appId eq '$appId'" --query "[0].id" -o tsv 2>$null
+            }
             
             if ($servicePrincipalId) {
-                $grantCheck = az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$servicePrincipalId/appRoleAssignments" -o json 2>$null
+                # Obter o SP do WindowsDefenderATP
+                $mdeResourceSpId = az ad sp list --filter "appId eq 'fc780465-2017-40d4-a0c5-307022471b92'" --query "[0].id" -o tsv 2>$null
                 
-                if ($grantCheck -and $grantCheck -ne "[]") {
-                    Write-ValidationStep "Consentimento concedido com sucesso!" "OK"
+                # Conceder consent via appRoleAssignment (Graph API)
+                $consentBody = @{
+                    principalId = $servicePrincipalId
+                    resourceId  = $mdeResourceSpId
+                    appRoleId   = $mdeRoleId
+                } | ConvertTo-Json
+                $consentFile = Join-Path $tempPath "mde-consent.json"
+                $consentBody | Out-File $consentFile -Encoding UTF8 -Force -NoNewline
+                
+                $consentResult = az rest --method POST --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$servicePrincipalId/appRoleAssignments" --headers "Content-Type=application/json" --body "@$consentFile" -o json 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-ValidationStep "Admin consent concedido automaticamente!" "OK"
                     $consentGranted = $true
                 } else {
-                    Write-ValidationStep "Consentimento ainda pendente" "WAIT"
-                    Write-Host "     Pode levar alguns minutos para propagar" -ForegroundColor Gray
+                    Write-ValidationStep "Consent pode ja existir ou requer Global Admin" "WAIT"
+                    Write-Host "     $consentResult" -ForegroundColor Gray
                     $consentGranted = $false
                 }
             } else {
