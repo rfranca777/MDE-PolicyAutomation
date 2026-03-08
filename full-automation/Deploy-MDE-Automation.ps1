@@ -108,18 +108,90 @@ for ($i = 0; $i -lt $subscriptions.Count; $i++) {
     Write-Host "  [$($i + 1)] $($subscriptions[$i].Name)" -ForegroundColor White
 }
 
-do {
-    Write-Host "`n  Selecione (1-$($subscriptions.Count)): " -NoNewline -ForegroundColor Cyan
-    $selection = Read-Host
-    $selectionNum = [int]$selection - 1
-} while ($selectionNum -lt 0 -or $selectionNum -ge $subscriptions.Count)
+Write-Host "`n  Selecione uma ou mais (ex: 1,2 ou 'all'): " -NoNewline -ForegroundColor Cyan
+$selInput = Read-Host
+$selectedSubs = @()
+if ($selInput -eq "all" -or $selInput -eq "ALL" -or $selInput -eq "todos") {
+    $selectedSubs = $subscriptions
+} else {
+    foreach ($s in ($selInput -split ',')) {
+        $idx = [int]$s.Trim() - 1
+        if ($idx -ge 0 -and $idx -lt $subscriptions.Count) {
+            $selectedSubs += $subscriptions[$idx]
+        }
+    }
+}
 
-$selectedSub = $subscriptions[$selectionNum]
+if ($selectedSubs.Count -eq 0) {
+    Write-ValidationStep "Nenhuma subscription selecionada" "ERROR"
+    exit 1
+}
+
+Write-ValidationStep "Subscriptions selecionadas: $($selectedSubs.Count)" "OK"
+foreach ($ss in $selectedSubs) { Write-Host "     - $($ss.Name)" -ForegroundColor Gray }
+
+# ============================================================
+# CONFIGURACOES GLOBAIS (aplicam a todas as subscriptions)
+# ============================================================
+Write-Host "`n  Location:" -ForegroundColor Yellow
+Write-Host "  Sugestao: eastus" -ForegroundColor Green
+Write-Host "  [ENTER aceitar | Digite outra]: " -NoNewline -ForegroundColor Cyan
+$locInput = Read-Host
+$location = if ([string]::IsNullOrWhiteSpace($locInput)) { "eastus" } else { $locInput }
+Write-ValidationStep "Location: $location" "OK"
+
+Write-Host "`n  Incluir Azure Arc machines?" -ForegroundColor Yellow
+Write-Host "  [ENTER para SIM | N para nao]: " -NoNewline -ForegroundColor Cyan
+$arcInput = Read-Host
+$includeArc = -not ($arcInput -eq "N" -or $arcInput -eq "n")
+Write-ValidationStep "Azure Arc: $(if ($includeArc) { 'SIM' } else { 'NAO' })" "OK"
+
+# ============================================================
+# TAGS CUSTOMIZAVEIS
+# ============================================================
+Write-Host "`n  Tags corporativas (aplicadas ao RG e Automation Account):" -ForegroundColor Yellow
+Write-Host "  Tags default:" -ForegroundColor Gray
+$defaultTags = @{
+    Project             = "MDE-Device-Management"
+    Environment         = "Production"
+    Owner               = "Security-Team"
+    CostCenter          = "SecOps-001"
+    Criticality         = "High"
+    Compliance          = "SOC2"
+    ManagedBy           = "Azure-Automation"
+    DataClassification  = "Internal"
+}
+foreach ($k in $defaultTags.Keys) { Write-Host "     $k=$($defaultTags[$k])" -ForegroundColor DarkGray }
+
+Write-Host "`n  Adicionar/alterar tags? (formato: Key1=Value1 Key2=Value2)" -ForegroundColor Yellow
+Write-Host "  [ENTER para manter defaults | Digite para adicionar/alterar]: " -NoNewline -ForegroundColor Cyan
+$tagInput = Read-Host
+if (-not [string]::IsNullOrWhiteSpace($tagInput)) {
+    foreach ($pair in ($tagInput -split '\s+')) {
+        $parts = $pair -split '=', 2
+        if ($parts.Count -eq 2 -and $parts[0].Length -gt 0) {
+            $defaultTags[$parts[0]] = $parts[1]
+            Write-Host "     + $($parts[0])=$($parts[1])" -ForegroundColor Green
+        }
+    }
+}
+$tags = ($defaultTags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '
+Write-ValidationStep "Tags configuradas: $($defaultTags.Count) tags" "OK"
+
+# ============================================================
+# LOOP POR CADA SUBSCRIPTION SELECIONADA
+# ============================================================
+$subIndex = 0
+foreach ($selectedSub in $selectedSubs) {
+$subIndex++
 $subscriptionName = $selectedSub.Name
 $subscriptionId = $selectedSub.Id
 
 az account set --subscription $subscriptionId 2>$null
-Write-ValidationStep "Subscription: $subscriptionName" "OK"
+
+Write-Host "`n============================================================" -ForegroundColor Magenta
+Write-Host "  SUBSCRIPTION $subIndex/$($selectedSubs.Count): $subscriptionName" -ForegroundColor White
+Write-Host "============================================================`n" -ForegroundColor Magenta
 
 # ============================================================
 # ETAPA 2: GERAR NOMENCLATURA BASEADA EM SUBSCRIPTION
@@ -155,19 +227,6 @@ Write-ValidationStep "Schedule: $scheduleName" "INFO"
 Write-ValidationStep "Runbook: $runbookName" "INFO"
 Write-ValidationStep "Policy: $policyName" "INFO"
 
-Write-Host "`n  Location:" -ForegroundColor Yellow
-Write-Host "  Sugestao: eastus" -ForegroundColor Green
-Write-Host "  [ENTER aceitar | Digite outra]: " -NoNewline -ForegroundColor Cyan
-$locInput = Read-Host
-$location = if ([string]::IsNullOrWhiteSpace($locInput)) { "eastus" } else { $locInput }
-Write-ValidationStep "Location: $location" "OK"
-
-Write-Host "`n  Incluir Azure Arc machines?" -ForegroundColor Yellow
-Write-Host "  [ENTER para SIM | N para nao]: " -NoNewline -ForegroundColor Cyan
-$arcInput = Read-Host
-$includeArc = -not ($arcInput -eq "N" -or $arcInput -eq "n")
-Write-ValidationStep "Azure Arc: $(if ($includeArc) { 'SIM' } else { 'NAO' })" "OK"
-
 # ============================================================
 # ETAPA 3: RESOURCE GROUP
 # ============================================================
@@ -175,8 +234,6 @@ Write-Host "`n[3/14] RESOURCE GROUP" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 $existingRg = az group show --name $resourceGroupName 2>$null | ConvertFrom-Json
-
-$tags = 'Project=MDE-Device-Management Environment=Production Owner=Security-Team CostCenter=SecOps-001 Criticality=High Compliance=SOC2 ManagedBy=Azure-Automation DataClassification=Internal'
 
 if ($existingRg) {
     Write-ValidationStep "Resource Group existente detectado" "WAIT"
@@ -340,6 +397,7 @@ if ($existingAA -and $existingAA.id) {
         --resource-group $resourceGroupName `
         --location $location `
         --sku Basic `
+        --tags $tags `
         --output none 2>$null
     
     if ($LASTEXITCODE -eq 0) {
@@ -1134,7 +1192,20 @@ if ($appId) {
         $tenantId = (az account show --query "tenantId" -o tsv 2>$null)
         
         # Adicionar permissao WindowsDefenderATP Machine.ReadWrite.All
-        Write-ValidationStep "Adicionando permissao WindowsDefenderATP..." "WAIT"
+        Write-ValidationStep "Verificando licenca MDE (WindowsDefenderATP)..." "WAIT"
+        
+        # Verificar se o recurso WindowsDefenderATP existe no tenant
+        $mdeSpCheck = az ad sp list --filter "appId eq 'fc780465-2017-40d4-a0c5-307022471b92'" --query "[0].id" -o tsv 2>$null
+        
+        if (-not $mdeSpCheck) {
+            Write-ValidationStep "WindowsDefenderATP nao encontrado no tenant (sem licenca MDE P2)" "WAIT"
+            Write-Host "     Stage 14 requer Microsoft Defender for Endpoint Plan 2" -ForegroundColor Yellow
+            Write-Host "     O App Registration foi criado mas a permissao MDE nao pode ser configurada" -ForegroundColor Yellow
+            Write-Host "     Quando a licenca MDE P2 for ativada, execute novamente o script" -ForegroundColor Yellow
+            $consentGranted = $false
+        } else {
+            Write-ValidationStep "WindowsDefenderATP encontrado no tenant" "OK"
+            Write-ValidationStep "Adicionando permissao WindowsDefenderATP..." "WAIT"
         
         # WindowsDefenderATP Resource App ID: fc780465-2017-40d4-a0c5-307022471b92
         # Machine.ReadWrite.All App Role ID: 7b5b1b6f-35f7-4a9e-a077-3be7e992fa8c
@@ -1203,6 +1274,7 @@ if ($appId) {
             Write-ValidationStep "Erro ao adicionar permissao" "ERROR"
             $consentGranted = $false
         }
+        } # fim do else mdeSpCheck
         
         # Criar script PowerShell para tagging MDE
         Write-ValidationStep "Gerando script de tagging MDE..." "WAIT"
@@ -1436,7 +1508,7 @@ Write-Host ""
 Write-ValidationStep "Stage 14 concluido" "OK"
 
 # ============================================================
-# RELATORIO FINAL
+# RELATORIO POR SUBSCRIPTION
 # ============================================================
 Write-Host "`n============================================================" -ForegroundColor Green
 Write-Host "  DEPLOYMENT CONCLUIDO COM SUCESSO!" -ForegroundColor White
@@ -1498,3 +1570,11 @@ Write-Host "  # Verificar membros do grupo:" -ForegroundColor Gray
 Write-Host "  az rest --method GET --uri `"https://graph.microsoft.com/v1.0/groups/$groupId/members`" --query 'value[].displayName'" -ForegroundColor White
 
 Write-Host "`n============================================================`n" -ForegroundColor Magenta
+
+} # FIM DO LOOP FOREACH SUBSCRIPTION
+
+Write-Host "`n============================================================" -ForegroundColor Green
+Write-Host "  DEPLOYMENT GLOBAL CONCLUIDO!" -ForegroundColor White
+Write-Host "  Subscriptions processadas: $($selectedSubs.Count)" -ForegroundColor Gray
+foreach ($ss in $selectedSubs) { Write-Host "     - $($ss.Name)" -ForegroundColor Gray }
+Write-Host "============================================================`n" -ForegroundColor Green
