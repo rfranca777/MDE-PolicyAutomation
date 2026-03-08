@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     MDE Policy Automation — 14-Stage Autonomous Deployment
     
@@ -303,6 +303,8 @@ foreach ($staleGroupDef in @(
     if ($staleGroupDef.Tag -eq "7")  { $groupIdStale7  = $sgId }
     if ($staleGroupDef.Tag -eq "30") { $groupIdStale30 = $sgId }
     if ($staleGroupDef.Tag -eq "eph") { $groupIdEphemeral = $sgId }
+
+    Start-Sleep -Seconds 3
 }
 
 Write-ValidationStep "Grupo Stale-7d ID: $groupIdStale7" "INFO"
