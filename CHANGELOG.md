@@ -2,6 +2,19 @@
 
 All notable changes to MDE Policy Automation will be documented in this file.
 
+## [1.4.0] — 2026-03-08
+
+### Added
+- **Multi-subscription support**: Select multiple subscriptions at once (comma-separated `1,2,3` or `all`). Stages 2-14 execute per subscription with a global summary at the end
+- **Custom tags prompt**: Interactive prompt to add/override tags (format: `Key1=Value1 Key2=Value2`). Default 8 corporate tags shown, user can extend. Tags applied to Resource Group + Automation Account
+- **MDE license detection**: Stage 14 now checks if WindowsDefenderATP Service Principal exists in tenant before attempting consent. Graceful skip with guidance for tenants without MDE P2 license (fixes AADSTS65006)
+- Tags applied to Automation Account via `--tags` parameter
+
+### Changed
+- Global config (location, Arc, tags) asked once and reused across all subscriptions
+- Stage 1 refactored: subscription selection separated from global config
+- Version bumped to 1.4.0
+
 ## [1.3.0] — 2026-03-06
 
 ### Added
