@@ -96,7 +96,9 @@ if (-not $currentContext) {
 
 Write-ValidationStep "Autenticado: $($currentContext.user.name)" "OK"
 
-$subscriptions = @(az account list --query "[].{Name:name, Id:id, State:state}" -o json | ConvertFrom-Json | Where-Object { $_.State -eq "Enabled" })
+$subsRaw = az account list --query "[].{Name:name, Id:id, State:state}" -o json 2>$null
+$subsAll = $subsRaw | ConvertFrom-Json
+$subscriptions = @($subsAll | Where-Object { $_.State -eq "Enabled" })
 
 if ($subscriptions.Count -eq 0) {
     Write-ValidationStep "Nenhuma subscription ativa encontrada" "ERROR"
@@ -106,6 +108,7 @@ if ($subscriptions.Count -eq 0) {
 Write-Host "`n  Subscriptions disponiveis:" -ForegroundColor Yellow
 for ($i = 0; $i -lt $subscriptions.Count; $i++) {
     Write-Host "  [$($i + 1)] $($subscriptions[$i].Name)" -ForegroundColor White
+    Write-Host "       ID: $($subscriptions[$i].Id)" -ForegroundColor DarkGray
 }
 
 Write-Host "`n  Selecione uma ou mais (ex: 1,2 ou 'all'): " -NoNewline -ForegroundColor Cyan
