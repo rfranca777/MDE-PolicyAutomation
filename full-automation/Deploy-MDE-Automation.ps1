@@ -165,6 +165,10 @@ $defaultTags = @{
     Compliance          = "SOC2"
     ManagedBy           = "Azure-Automation"
     DataClassification  = "Internal"
+    created_by          = "Seg Info"
+    squad_owner         = "Seg Info"
+    cod_budget          = "SEG-0012"
+    cost_center         = "72060104"
 }
 foreach ($k in $defaultTags.Keys) { Write-Host "     $k=$($defaultTags[$k])" -ForegroundColor DarkGray }
 
