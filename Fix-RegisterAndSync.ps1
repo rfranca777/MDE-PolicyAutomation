@@ -40,7 +40,7 @@ $unmatched = @()
 foreach ($vm in $vms) {
     $vmName = $vm.name
     # Procurar device por nome (case-insensitive, partial match)
-    $found = $deviceList | Where-Object { $_.displayName -like "*$vmName*" -or $vmName -like "*$($_.displayName)*" }
+    $found = $deviceList | Where-Object { $_.displayName -eq $vmName -or $_.displayName -like "$vmName.*" -or $_.displayName -like "*\\$vmName" }
     if ($found) {
         $dev = $found | Select-Object -First 1
         Write-Host "  [MATCH] $vmName -> Device: $($dev.displayName) (ID: $($dev.id))" -ForegroundColor Green
@@ -63,14 +63,11 @@ if ($unmatched.Count -gt 0) {
         $extPublisher = if ($vm.os -eq "Windows") { "Microsoft.Azure.ActiveDirectory" } else { "Microsoft.Azure.ActiveDirectory" }
         $extType = if ($vm.os -eq "Windows") { "AADLoginForWindows" } else { "AADSSHLoginForLinux" }
         
-        Write-Host "  [$($vm.os)] $($vm.name) -> Instalando $extName..." -ForegroundColor Yellow
+        $vmRg = $vm.rg
+        $vmNm = $vm.name
+        Write-Host "  [$($vm.os)] $vmNm -> Instalando $extName..." -ForegroundColor Yellow
         
-        az vm extension set `
-            --resource-group $vm.rg `
-            --vm-name $vm.name `
-            --name $extType `
-            --publisher $extPublisher `
-            --output none 2>$null
+        az vm extension set --resource-group $vmRg --vm-name $vmNm --name $extType --publisher $extPublisher --output none 2>$null
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "    [OK] Extensao instalada" -ForegroundColor Green
@@ -84,11 +81,11 @@ if ($unmatched.Count -gt 0) {
     
     # Re-verificar devices
     Write-Host "  Re-verificando devices..." -ForegroundColor Cyan
-    $allDevices2 = az rest --method GET --uri "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,operatingSystem" -o json 2>$null | ConvertFrom-Json
+    $allDevices2 = az rest --method GET --uri "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,operatingSystem,approximateLastSignInDateTime" -o json 2>$null | ConvertFrom-Json
     $deviceList = $allDevices2.value
     
     foreach ($vm in $unmatched) {
-        $found = $deviceList | Where-Object { $_.displayName -like "*$($vm.name)*" }
+        $found = $deviceList | Where-Object { $_.displayName -eq $vm.name -or $_.displayName -like "$($vm.name).*" }
         if ($found) {
             $dev = $found | Select-Object -First 1
             Write-Host "  [NOVO] $($vm.name) -> Device: $($dev.displayName) (ID: $($dev.id))" -ForegroundColor Green
