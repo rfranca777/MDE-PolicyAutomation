@@ -157,14 +157,6 @@ Write-ValidationStep "Azure Arc: $(if ($includeArc) { 'SIM' } else { 'NAO' })" "
 Write-Host "`n  Tags corporativas (aplicadas ao RG e Automation Account):" -ForegroundColor Yellow
 Write-Host "  Tags default:" -ForegroundColor Gray
 $defaultTags = @{
-    Project             = "MDE-Device-Management"
-    Environment         = "Production"
-    Owner               = "Security-Team"
-    CostCenter          = "SecOps-001"
-    Criticality         = "High"
-    Compliance          = "SOC2"
-    ManagedBy           = "Azure-Automation"
-    DataClassification  = "Internal"
     created_by          = "Seg Info"
     squad_owner         = "Seg Info"
     cod_budget          = "SEG-0012"
