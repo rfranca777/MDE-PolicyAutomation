@@ -378,18 +378,33 @@ Write-ValidationStep "Grupo Ephemeral ID: $groupIdEphemeral" "INFO"
 Write-Host "`n[5/14] AUTOMATION ACCOUNT" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
-$aaShowResult = az automation account show --name $automationAccountName --resource-group $resourceGroupName 2>$null
+# Detectar AA existente — busca por nome exato E por qualquer AA no RG
 $existingAA = $null
-if ($aaShowResult -and $LASTEXITCODE -eq 0) {
-    try {
-        $existingAA = $aaShowResult | ConvertFrom-Json
-    } catch {
-        $existingAA = $null
+Write-ValidationStep "Verificando Automation Accounts no RG $resourceGroupName..." "WAIT"
+
+try {
+    $aaListResult = az automation account list --resource-group $resourceGroupName -o json 2>&1
+    if ($LASTEXITCODE -eq 0 -and $aaListResult) {
+        $aaList = $aaListResult | ConvertFrom-Json
+        if ($aaList.Count -gt 0) {
+            # Procura pelo nome esperado primeiro
+            $existingAA = $aaList | Where-Object { $_.name -eq $automationAccountName } | Select-Object -First 1
+            if (-not $existingAA) {
+                # Existe um AA com outro nome — avisar
+                $otherAA = $aaList[0]
+                Write-ValidationStep "Encontrado AA com nome diferente: $($otherAA.name)" "WAIT"
+                Write-Host "     O script espera: $automationAccountName" -ForegroundColor Yellow
+                Write-Host "     Existente no RG: $($otherAA.name)" -ForegroundColor Yellow
+                Write-Host "     O script ira criar um novo com o nome padrao" -ForegroundColor Gray
+            }
+        }
     }
+} catch {
+    Write-Host "     Debug - Erro ao listar AAs: $_" -ForegroundColor Gray
 }
 
 if ($existingAA -and $existingAA.id) {
-    Write-ValidationStep "Automation Account existente detectado: $automationAccountName" "WAIT"
+    Write-ValidationStep "Automation Account existente detectado: $automationAccountName" "OK"
     Write-Host "     Deseja reutilizar? [ENTER=SIM | N=criar novo (vai apagar o atual)]" -NoNewline -ForegroundColor Yellow
     Write-Host ": " -NoNewline -ForegroundColor Cyan
     $reuseAA = Read-Host
@@ -409,27 +424,38 @@ if (-not $existingAA -or -not $existingAA.id) {
     Write-Host "     RG: $resourceGroupName" -ForegroundColor Gray
     Write-Host "     Location: $location" -ForegroundColor Gray
     
-    az automation account create `
+    $aaCreateResult = az automation account create `
         --name $automationAccountName `
         --resource-group $resourceGroupName `
         --location $location `
         --sku Basic `
         --tags $tags `
-        --output none 2>$null
+        --output json 2>&1
     
     if ($LASTEXITCODE -eq 0) {
         Write-ValidationStep "Automation Account criado com sucesso" "OK"
     } else {
         Write-ValidationStep "Falha ao criar Automation Account" "ERROR"
+        Write-Host "     Erro: $aaCreateResult" -ForegroundColor Red
+        Write-Host "     Verifique permissoes: Contributor na subscription" -ForegroundColor Yellow
+        Write-Host "     Verifique limites: max 50 AAs por subscription" -ForegroundColor Yellow
         continue
     }
 }
 
-$aaValidation = az automation account show --name $automationAccountName --resource-group $resourceGroupName --query "name" -o tsv 2>$null
+# Validacao com retry
+$aaValidation = $null
+for ($retry = 1; $retry -le 3; $retry++) {
+    $aaValidation = az automation account show --name $automationAccountName --resource-group $resourceGroupName --query "name" -o tsv 2>$null
+    if ($aaValidation) { break }
+    Write-Host "     Aguardando propagacao ($retry/3)..." -ForegroundColor Gray
+    Start-Sleep -Seconds 5
+}
 if ($aaValidation) {
     Write-ValidationStep "Validacao: Automation Account confirmado" "OK"
 } else {
     Write-ValidationStep "Validacao: Automation Account falhou" "ERROR"
+    Write-Host "     O AA pode estar sendo provisionado. Tente reexecutar em 2 minutos." -ForegroundColor Yellow
     continue
 }
 
