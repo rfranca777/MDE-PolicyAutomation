@@ -839,7 +839,8 @@ if ($rbValidation -and $rbValidation.properties.state -eq "Published") {
 Write-Host "`n[11/14] SCHEDULE E JOB SCHEDULE" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
-$startTime = (Get-Date).AddHours(1).ToString("yyyy-MM-ddTHH:00:00")
+$startTime = (Get-Date).ToUniversalTime().AddHours(1).ToString("yyyy-MM-ddTHH:mm:ssZ")
+$expiryTime = (Get-Date).ToUniversalTime().AddYears(5).ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 Write-ValidationStep "Criando schedule horario (inicio: $startTime)..." "WAIT"
 
@@ -848,24 +849,33 @@ $schedBody = @{
     properties = @{
         description = "Hourly sync for MDE device management"
         startTime = $startTime
+        expiryTime = $expiryTime
         frequency = "Hour"
         interval = 1
+        timeZone = "UTC"
     }
 } | ConvertTo-Json -Depth 5
 $schedFile = Join-Path $tempPath "schedule-body.json"
 $schedBody | Out-File $schedFile -Encoding UTF8 -Force -NoNewline
 
-az rest --method PUT --uri $schedUri --body "@$schedFile" --output none 2>$null
+$schedResult = az rest --method PUT --uri $schedUri --body "@$schedFile" -o json 2>&1
 
 if ($LASTEXITCODE -eq 0) {
     Write-ValidationStep "Schedule criado" "OK"
 } else {
-    Write-ValidationStep "Schedule pode ja existir" "OK"
+    Write-Host "     Debug schedule: $schedResult" -ForegroundColor Gray
+    Write-ValidationStep "Schedule pode ja existir (tentando validar...)" "WAIT"
 }
 
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 5
 
-$schedCheck = az rest --method GET --uri $schedUri -o json 2>$null | ConvertFrom-Json
+$schedCheck = $null
+for ($schedRetry = 1; $schedRetry -le 3; $schedRetry++) {
+    $schedCheck = az rest --method GET --uri $schedUri -o json 2>$null | ConvertFrom-Json
+    if ($schedCheck -and $schedCheck.name) { break }
+    Write-Host "     Aguardando propagacao schedule ($schedRetry/3)..." -ForegroundColor Gray
+    Start-Sleep -Seconds 5
+}
 if ($schedCheck -and $schedCheck.name) {
     Write-ValidationStep "Validacao: Schedule confirmado" "OK"
 } else {
