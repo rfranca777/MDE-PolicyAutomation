@@ -402,6 +402,9 @@ if ($existingAA -and $existingAA.id) {
         $existingAA = $null
     } else {
         Write-ValidationStep "Automation Account reutilizado" "OK"
+        # Atualizar tags no AA existente
+        az tag create --resource-id "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName" --tags $tags --output none 2>$null
+        Write-ValidationStep "Tags atualizadas no AA existente" "OK"
     }
 }
 
@@ -627,36 +630,23 @@ if ($permValidation) {
 Write-Host "`n[9/14] MODULOS POWERSHELL (Az.Accounts + Az.ConnectedMachine)" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
-Write-ValidationStep "Instalando modulo Az.Accounts..." "WAIT"
+$moduleBaseUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/modules"
 
-az automation module create `
-    --automation-account-name $automationAccountName `
-    --resource-group $resourceGroupName `
-    --name "Az.Accounts" `
-    --content-link uri="https://www.powershellgallery.com/api/v2/package/Az.Accounts" `
-    --output none 2>$null
-
-if ($LASTEXITCODE -eq 0) {
-    Write-ValidationStep "Az.Accounts instalacao iniciada" "OK"
-    Write-Host "     Propagacao: 2-5 minutos" -ForegroundColor Gray
-} else {
-    Write-ValidationStep "Az.Accounts pode ja existir" "OK"
-}
-
-Write-ValidationStep "Instalando modulo Az.ConnectedMachine..." "WAIT"
-
-az automation module create `
-    --automation-account-name $automationAccountName `
-    --resource-group $resourceGroupName `
-    --name "Az.ConnectedMachine" `
-    --content-link uri="https://www.powershellgallery.com/api/v2/package/Az.ConnectedMachine" `
-    --output none 2>$null
-
-if ($LASTEXITCODE -eq 0) {
-    Write-ValidationStep "Az.ConnectedMachine instalacao iniciada" "OK"
-    Write-Host "     Necessario para suporte Azure Arc machines no runbook" -ForegroundColor Gray
-} else {
-    Write-ValidationStep "Az.ConnectedMachine pode ja existir" "OK"
+foreach ($mod in @(
+    @{ Name = 'Az.Accounts'; Desc = 'Base module para autenticacao' },
+    @{ Name = 'Az.ConnectedMachine'; Desc = 'Suporte Azure Arc machines' }
+)) {
+    Write-ValidationStep "Instalando modulo $($mod.Name)..." "WAIT"
+    $modBody = @{ properties = @{ contentLink = @{ uri = "https://www.powershellgallery.com/api/v2/package/$($mod.Name)" } } } | ConvertTo-Json -Depth 5
+    $modFile = Join-Path $tempPath "module-$($mod.Name).json"
+    $modBody | Out-File $modFile -Encoding UTF8 -Force -NoNewline
+    az rest --method PUT --uri "$moduleBaseUri/$($mod.Name)?api-version=2023-11-01" --body "@$modFile" --output none 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-ValidationStep "$($mod.Name) instalacao iniciada" "OK"
+        Write-Host "     $($mod.Desc)" -ForegroundColor Gray
+    } else {
+        Write-ValidationStep "$($mod.Name) pode ja existir" "OK"
+    }
 }
 
 # ============================================================
@@ -751,12 +741,13 @@ Write-Output "=== Sync Complete ==="
 $runbookFile = Join-Path $tempPath "runbook-sync.ps1"
 $runbookCode | Out-File $runbookFile -Encoding UTF8 -Force -NoNewline
 
-# Verificar se runbook ja existe
+# Verificar se runbook ja existe (via az rest — estavel)
 Write-ValidationStep "Verificando runbook existente..." "WAIT"
-$existingRunbook = az automation runbook show --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName 2>$null | ConvertFrom-Json
+$rbCheckUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName?api-version=2023-11-01"
+$existingRunbook = az rest --method GET --uri $rbCheckUri -o json 2>$null | ConvertFrom-Json
 
-if ($existingRunbook) {
-    Write-ValidationStep "Runbook existente detectado (State: $($existingRunbook.state))" "OK"
+if ($existingRunbook -and $existingRunbook.name) {
+    Write-ValidationStep "Runbook existente detectado (State: $($existingRunbook.properties.state))" "OK"
     Write-ValidationStep "Atualizando runbook com codigo v1.4.1..." "WAIT"
 } else {
     Write-ValidationStep "Criando novo runbook..." "WAIT"
@@ -824,14 +815,16 @@ if ($LASTEXITCODE -eq 0) {
 }
 Start-Sleep -Seconds 3
 
-# VALIDACAO FINAL
+# VALIDACAO FINAL (via az rest — estavel)
 Write-ValidationStep "Validando runbook..." "WAIT"
-$rbValidation = az automation runbook show --name $runbookName --automation-account-name $automationAccountName --resource-group $resourceGroupName --query "{Name:name,State:state,Type:runbookType}" -o json 2>$null | ConvertFrom-Json
+$rbValUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/runbooks/$runbookName?api-version=2023-11-01"
+$rbValidation = az rest --method GET --uri $rbValUri -o json 2>$null | ConvertFrom-Json
 
-if ($rbValidation -and $rbValidation.State -eq "Published") {
+if ($rbValidation -and $rbValidation.properties.state -eq "Published") {
     Write-ValidationStep "Runbook validado (State: Published)" "OK"
 } else {
-    Write-ValidationStep "Runbook nao publicado corretamente (State: $($rbValidation.State))" "ERROR"
+    $rbState = if ($rbValidation) { $rbValidation.properties.state } else { 'NotFound' }
+    Write-ValidationStep "Runbook nao publicado corretamente (State: $rbState)" "ERROR"
     continue
 }
 
@@ -845,15 +838,19 @@ $startTime = (Get-Date).AddHours(1).ToString("yyyy-MM-ddTHH:00:00")
 
 Write-ValidationStep "Criando schedule horario (inicio: $startTime)..." "WAIT"
 
-az automation schedule create `
-    --automation-account-name $automationAccountName `
-    --resource-group $resourceGroupName `
-    --name $scheduleName `
-    --frequency Hour `
-    --interval 1 `
-    --start-time $startTime `
-    --description "Hourly sync for MDE device management" `
-    --output none 2>$null
+$schedUri = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Automation/automationAccounts/$automationAccountName/schedules/$scheduleName" + "?api-version=2023-11-01"
+$schedBody = @{
+    properties = @{
+        description = "Hourly sync for MDE device management"
+        startTime = $startTime
+        frequency = "Hour"
+        interval = 1
+    }
+} | ConvertTo-Json -Depth 5
+$schedFile = Join-Path $tempPath "schedule-body.json"
+$schedBody | Out-File $schedFile -Encoding UTF8 -Force -NoNewline
+
+az rest --method PUT --uri $schedUri --body "@$schedFile" --output none 2>$null
 
 if ($LASTEXITCODE -eq 0) {
     Write-ValidationStep "Schedule criado" "OK"
@@ -863,8 +860,8 @@ if ($LASTEXITCODE -eq 0) {
 
 Start-Sleep -Seconds 3
 
-$schedValidation = az automation schedule show --name $scheduleName --automation-account-name $automationAccountName --resource-group $resourceGroupName --query "name" -o tsv 2>$null
-if ($schedValidation) {
+$schedCheck = az rest --method GET --uri $schedUri -o json 2>$null | ConvertFrom-Json
+if ($schedCheck -and $schedCheck.name) {
     Write-ValidationStep "Validacao: Schedule confirmado" "OK"
 } else {
     Write-ValidationStep "Validacao: Schedule falhou" "ERROR"
