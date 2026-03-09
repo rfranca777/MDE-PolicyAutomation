@@ -168,19 +168,21 @@ $defaultTags = @{
 }
 foreach ($k in $defaultTags.Keys) { Write-Host "     $k=$($defaultTags[$k])" -ForegroundColor DarkGray }
 
-Write-Host "`n  Adicionar/alterar tags? (formato: Key1=Value1 Key2=Value2)" -ForegroundColor Yellow
+Write-Host "`n  Adicionar/alterar tags? (formato: Key1=Value1;Key2=Value2)" -ForegroundColor Yellow
+Write-Host "  Valores com espaco sao suportados (ex: squad_owner=Seg Info)" -ForegroundColor Gray
 Write-Host "  [ENTER para manter defaults | Digite para adicionar/alterar]: " -NoNewline -ForegroundColor Cyan
 $tagInput = Read-Host
 if (-not [string]::IsNullOrWhiteSpace($tagInput)) {
-    foreach ($pair in ($tagInput -split '\s+')) {
+    foreach ($pair in ($tagInput -split ';')) {
+        $pair = $pair.Trim()
         $parts = $pair -split '=', 2
-        if ($parts.Count -eq 2 -and $parts[0].Length -gt 0) {
-            $defaultTags[$parts[0]] = $parts[1]
-            Write-Host "     + $($parts[0])=$($parts[1])" -ForegroundColor Green
+        if ($parts.Count -eq 2 -and $parts[0].Trim().Length -gt 0) {
+            $defaultTags[$parts[0].Trim()] = $parts[1].Trim()
+            Write-Host "     + $($parts[0].Trim())=$($parts[1].Trim())" -ForegroundColor Green
         }
     }
 }
-$tags = ($defaultTags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value -replace ' ', '_')" }) -join ' '
+$tags = @($defaultTags.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" })
 Write-ValidationStep "Tags configuradas: $($defaultTags.Count) tags" "OK"
 
 # ============================================================
