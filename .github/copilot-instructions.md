@@ -14,14 +14,11 @@ Every AI agent session in this project MUST:
 
 ## Key Non-Negotiables (inline reminder)
 
-- NEVER fabricate data or credentials (P1, P3).
+- NEVER fabricate data or credentials (P1).
 - NEVER rewrite files — edit surgically (P2, O4).
-- NEVER remove code blindly — understand the full project first (P8).
-- ALWAYS study deeply in technical sites before each activity (O1).
 - ALWAYS warn before destructive actions (P6, O7).
-- Approval required only for NEW IDEAS from the LLM (O8).
+- ALWAYS require human approval before executing (O8).
 - NEVER version files by name (-v2, -v3) — use Git (S7).
-- NEVER run Connect-AzAccount/MgGraph without explicit confirmation (S4).
 
 ## Constitution Version
 

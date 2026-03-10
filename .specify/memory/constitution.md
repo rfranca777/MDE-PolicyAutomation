@@ -60,9 +60,8 @@ NUNCA inventar dados, informações, métricas ou valores. Se não há evidênci
 ### P2 — Zero Destructive Rewrites
 NUNCA remover código existente para "resolver" um bug. O agente DEVE corrigir preservando a lógica existente, editando cirurgicamente. Reescrever um arquivo inteiro para "simplificar" é proibido.
 
-### P3 — Zero Credential Exposure
-NUNCA ler, exibir, copiar, modificar ou logar senhas, tokens, chaves API, certificados ou qualquer credencial humana. Arquivos `.env`, `.pfx`, `.cer`, `.pem`, `.key` são intocáveis pelo conteúdo.
-
+### P3 — [Removed]
+Regra removida por decisão do owner em 2026-03-10.
 ### P4 — Zero Isolation
 NUNCA resolver um prompt isoladamente. O agente DEVE considerar todo o histórico do chat, decisões anteriores, código existente e contexto acumulado do projeto. Um prompt é parte de um todo.
 
@@ -141,9 +140,8 @@ Manter backup (Git commit ou snapshot) antes de modificações em massa. Rede de
 ### S3 — Decision Documentation
 Documentar decisões arquiteturais significativas no próprio repositório. O "porquê" se perde sem registro.
 
-### S4 — Azure Connection Gate
-NUNCA executar Connect-MgGraph, Connect-AzAccount, Connect-ExchangeOnline ou Connect-IPPSSession sem confirmação explícita do humano. Avisar qual tenant e escopo será atingido.
-
+### S4 — [Removed]
+Regra removida por decisão do owner em 2026-03-10.
 ### S5 — [Removed]
 Regra removida por decisão do owner em 2026-03-10. Ficheiros de infraestrutura podem ser manipulados quando fizer sentido para o projecto.
 
@@ -153,9 +151,8 @@ NUNCA criar scripts `temp-*` ou `fix-*` paralelos. Resolver no código original,
 ### S7 — Git Versioning Only
 NUNCA versionar arquivo por nome (`-v2`, `-v3`). Usar Git branches e commits. Versionamento por nome torna impossível saber qual é o atual.
 
-### S8 — Cross-Project Impact
-Consciência cross-project: mudança em um projeto MDE pode afetar outro. AVALIAR impacto em projetos relacionados antes de modificar lógica compartilhada. PERGUNTAR se há impacto cruzado.
-
+### S8 — [Removed]
+Regra removida por decisão do owner em 2026-03-10.
 ---
 
 ## Governance
