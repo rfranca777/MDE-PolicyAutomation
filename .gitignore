@@ -29,6 +29,9 @@ desktop.ini
 *.zip
 deployment-output/
 
+# Azure Functions
+local.settings.json
+
 # Reports (generated at runtime)
 reports/
 *.html
