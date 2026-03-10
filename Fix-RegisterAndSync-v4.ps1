@@ -61,12 +61,12 @@ function Parse-Json {
 
 function Force-Array {
     # Ensures result is always a PS array, even for single items
-    param([object]$Input)
-    if ($null -eq $Input) { return @() }
-    if ($Input -is [System.Collections.IEnumerable] -and $Input -isnot [string]) {
-        return @($Input)
+    param([object]$Data)
+    if ($null -eq $Data) { return @() }
+    if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
+        return @($Data)
     }
-    return @(,$Input)
+    return @(,$Data)
 }
 
 # ============================================================
