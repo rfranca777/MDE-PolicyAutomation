@@ -442,22 +442,29 @@ if ($needsExtension.Count -gt 0) {
     $installChoice = Read-Host
     
     if ($installChoice -match '^[Ss]') {
+        # PARALELO — todas as extensoes ao mesmo tempo via Start-Job
+        $jobs = @()
         foreach ($vm in $needsExtension) {
             $extType = if ($vm.os -eq "Windows") { "AADLoginForWindows" } else { "AADSSHLoginForLinux" }
-            Write-Host "  [$($vm.os)] $($vm.name) → Instalando $extType..." -ForegroundColor Yellow -NoNewline
-            
-            az vm extension set --resource-group $vm.rg --vm-name $vm.name --name $extType --publisher "Microsoft.Azure.ActiveDirectory" --output none 2>$null
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host " OK" -ForegroundColor Green
-            } else {
-                Write-Host " FALHOU (VM pode estar desligada)" -ForegroundColor Red
-            }
-            Start-Sleep -Seconds 2
+            Write-Host "  [$($vm.os)] $($vm.name) → Queued $extType" -ForegroundColor Yellow
+            $jobs += Start-Job -ScriptBlock {
+                param($rg,$name,$ext,$subId)
+                az account set --subscription $subId 2>$null
+                az vm extension set --resource-group $rg --vm-name $name --name $ext --publisher "Microsoft.Azure.ActiveDirectory" --output none 2>$null
+                @{ name=$name; ok=($LASTEXITCODE -eq 0) }
+            } -ArgumentList $vm.rg, $vm.name, $extType, $sub
         }
+        Write-Host "  Aguardando $($jobs.Count) instalacoes em paralelo..." -ForegroundColor Cyan
+        $jobs | Wait-Job -Timeout 300 | Out-Null
+        foreach ($j in $jobs) {
+            $res = Receive-Job -Job $j
+            if ($j.State -eq 'Completed' -and $res.ok) { Write-Host "  [OK] $($res.name)" -ForegroundColor Green }
+            else { Write-Host "  [FAIL] $($res.name)" -ForegroundColor Red }
+        }
+        $jobs | Remove-Job -Force
         
-        Write-Host "`n  Aguardando propagacao Entra ID (90s)..." -ForegroundColor Gray
-        Start-Sleep -Seconds 90
+        Write-Host "`n  Aguardando propagacao Entra ID (30s)..." -ForegroundColor Gray
+        Start-Sleep -Seconds 30
         
         # Re-fetch devices e tentar match novamente
         Write-Host "  Re-carregando devices..." -ForegroundColor Cyan
@@ -658,8 +665,6 @@ foreach ($m in $matched) {
     } else {
         Write-Host "  [!] $devName → erro ao adicionar (pode ja estar)" -ForegroundColor DarkYellow
     }
-    
-    Start-Sleep -Seconds 1  # Throttle Graph API
 }
 
 # ============================================================
