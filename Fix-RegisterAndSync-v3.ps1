@@ -224,9 +224,9 @@ if (-not $azCtx) {
 }
 Write-Host "  [OK] az logged in: $($azCtx.user.name)" -ForegroundColor Green
 
-# Validate Graph access
-$graphTest = az rest --method GET --uri "https://graph.microsoft.com/v1.0/me" -o json 2>$null
-if (-not $graphTest) {
+# Validate Graph access (use /organization instead of /me -- works with all auth types)
+$graphTest = (az rest --method GET --uri "https://graph.microsoft.com/v1.0/organization?`$select=displayName" -o json 2>$null) -join ''
+if (-not $graphTest -or $graphTest.Length -lt 5) {
     Write-Host "  [FAIL] No Graph API access. Check permissions." -ForegroundColor Red
     return
 }
@@ -270,9 +270,8 @@ $vmsRaw = az vm list --subscription $sub --query "[].{name:name, rg:resourceGrou
 $vms = @()
 if ($vmsRaw) { try { $vms = @(($vmsRaw -join '') | ConvertFrom-Json) } catch { $vms = @() } }
 
-$powerMap = @{}
-$powerRaw = az vm list --subscription $sub -d --query "[].{name:name, power:powerState}" -o json 2>$null
-if ($powerRaw) { try { (($powerRaw -join '') | ConvertFrom-Json) | ForEach-Object { $powerMap[$_.name] = $_.power } } catch {} }
+# NOTE: Power state skipped intentionally -- az vm list -d hangs on large subs.
+# Group assignment uses Entra device lastSignIn instead (more accurate anyway).
 
 $vmList = @()
 foreach ($vm in $vms) {
@@ -282,14 +281,12 @@ foreach ($vm in $vms) {
         os    = $vm.os
         id    = $vm.id
         vmId  = $vm.vmId
-        power = if ($powerMap.ContainsKey($vm.name)) { $powerMap[$vm.name] } else { "Unknown" }
     }
 }
 
 Write-Host "  Total VMs: $($vmList.Count)" -ForegroundColor White
 foreach ($v in $vmList) {
-    $pc = if ($v.power -match "running") { "Green" } elseif ($v.power -match "deallocated|stopped") { "Yellow" } else { "Gray" }
-    Write-Host ("  {0,-35} {1,-8} {2}" -f $v.name, $v.os, $v.power) -ForegroundColor $pc
+    Write-Host ("  {0,-35} {1,-8} {2}" -f $v.name, $v.os, $v.rg) -ForegroundColor White
 }
 
 if ($vmList.Count -eq 0) {
@@ -391,9 +388,8 @@ if ($matched.Count -eq 0) {
         $devId = $m.device.id
         $devName = $m.device.displayName
         $lastSign = $m.device.lastSignIn
-        $vmPower = $m.vm.power
 
-        # Determine target group
+        # Determine target group based on last sign-in
         $targetGroup = $grpMain
         $targetLabel = "Main"
         if ($lastSign) {
@@ -403,9 +399,7 @@ if ($matched.Count -eq 0) {
                 elseif ($daysAgo -gt 7) { $targetGroup = $grpStale7; $targetLabel = "Stale-7d" }
             } catch { }
         } else {
-            if ($vmPower -match "deallocated|stopped") {
-                $targetGroup = $grpStale7; $targetLabel = "Stale-7d"
-            }
+            $targetGroup = $grpStale7; $targetLabel = "Stale-7d"
         }
 
         # Check if already in target group
@@ -477,9 +471,9 @@ Write-Host "  Unmatched:  $($unmatched.Count)" -ForegroundColor $(if($unmatched.
 Write-Host "  In Groups:  $totalInGroups" -ForegroundColor White
 
 if ($unmatched.Count -gt 0) {
-    Write-Host "`n  UNMATCHED VMs (need AAD extension or are deallocated):" -ForegroundColor Yellow
+    Write-Host "`n  UNMATCHED VMs (need AAD extension or VM may be off):" -ForegroundColor Yellow
     foreach ($u in $unmatched) {
-        Write-Host "    $($u.name) [$($u.os)] $($u.power)" -ForegroundColor DarkYellow
+        Write-Host "    $($u.name) [$($u.os)] $($u.rg)" -ForegroundColor DarkYellow
     }
     Write-Host "`n  To fix: start deallocated VMs, ensure AAD extension is installed," -ForegroundColor Gray
     Write-Host "  wait 5-10 min for Entra propagation, then re-run this script." -ForegroundColor Gray
@@ -492,6 +486,6 @@ $logFile = Join-Path $tempPath ("mde-fix-v3-" + (Get-Date -Format 'yyyyMMdd-HHmm
 $logLines = @("FIX v3 -- $(Get-Date)", ("=" * 50), "VMs:$($vmList.Count) Matched:$($matched.Count) Unmatched:$($unmatched.Count)", "")
 foreach ($m in $matched) { $logLines += "$($m.layer) | $($m.vm.name) -> $($m.device.displayName)" }
 $logLines += ""
-foreach ($u in $unmatched) { $logLines += "MISS | $($u.name) [$($u.os)] $($u.power)" }
+foreach ($u in $unmatched) { $logLines += "MISS | $($u.name) [$($u.os)] $($u.rg)" }
 $logLines | Out-File $logFile -Encoding UTF8 -Force
 Write-Host "  Log: $logFile`n" -ForegroundColor Gray
