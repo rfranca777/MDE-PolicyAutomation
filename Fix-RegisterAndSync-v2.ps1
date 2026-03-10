@@ -33,11 +33,11 @@ $ErrorActionPreference = "Continue"
 # ============================================================
 # CONFIGURACAO -- ALTERAR CONFORME NECESSARIO
 # ============================================================
-$sub       = "fbb41bf3-dc95-4c71-8e14-396d3ed38b91"
-$grpMain   = "57290630-2627-4daa-9310-f21947a460f4"
-$grpStale7 = "e24ed75b-df91-47e0-8eaf-2520d16531ec"
-$grpStale30= "ccbbd400-1ac2-4b59-937e-2bcdcac1e2df"
-$grpEph    = "82d42fb0-4ff4-4b1a-a71a-4b39ef6e0239"
+$sub       = "121129d5-3986-447b-8a52-678b70ec6f76"
+$grpMain   = "ed0829b1-26ba-4c2a-b33f-3a618c3e3255"
+$grpStale7 = "4a221a76-c2a4-4702-ab14-ea048d3f526b"
+$grpStale30= "2de9c8f7-0bb1-4778-8d9c-4cf507527cf2"
+$grpEph    = "6d30e508-6e36-4d12-896e-e962d45d67d9"
 
 # Mapeamento manual -- para VMs com nomes completamente diferentes no Entra ID
 # Formato: "AzureVmName" = "EntraDeviceDisplayName"
