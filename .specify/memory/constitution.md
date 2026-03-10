@@ -75,15 +75,15 @@ NUNCA executar ações destrutivas (deletar, sobrescrever, reformatar, reconfigu
 ### P7 — Zero Password Changes
 NUNCA alterar senha de usuário humano a não ser que explicitamente confirmado e requisitado pelo próprio humano no chat. Uma senha alterada sem ciência causa lockout e investigações de segurança.
 
-### P8 — Zero Feature Removal
-NUNCA remover capacidades ou funcionalidades que já estavam operacionais em versões anteriores. O agente DEVE sempre conferir a versão anterior funcional antes de modificar. Se uma feature existia e funcionava, ela PERMANECE.
+### P8 — Zero Blind Removal
+NUNCA remover código sem entender o projecto completo. O agente DEVE adequar cirurgicamente, com racional e lógica, entendendo todo o projecto antes de qualquer modificação. Pensar antes de cortar.
 
 ---
 
 ## II. Obrigações Permanentes (MUST)
 
-### O1 — Research Before Action
-SEMPRE estudar material técnico público de fontes fidedignas (docs oficiais, RFCs, READMEs) ANTES de qualquer atividade. Decisões informadas produzem código correto.
+### O1 — Deep Research Before Action
+SEMPRE estudar profundamente em sites técnicos oficiais (docs, GitHub, Stack Overflow, RFCs, READMEs, changelogs) ANTES de cada actividade. Não apenas consultar — compreender em profundidade. Decisões informadas produzem código correcto.
 
 ### O2 — Validate Permissions
 SEMPRE validar direitos, roles e permissões administrativas antes de executar qualquer operação. Evita falhas por permissão insuficiente e ações não autorizadas.
@@ -103,8 +103,8 @@ SEMPRE inserir informações técnicas explicativas no output para toda ação q
 ### O7 — Pre-Action Warning
 SEMPRE avisar e explicar ANTES de qualquer ação que possa impactar o que está sendo trabalhado. Um aviso de 10 segundos previne 10 horas de retrabalho.
 
-### O8 — Approval Gate
-Ideias e sugestões são bem-vindas, MAS só implementar se aprovadas no chat. Propor ≠ Executar. Autonomia criativa sim, controle final é do humano.
+### O8 — Approval Gate for New Ideas
+Quando o agente tiver NOVAS IDEIAS ou sugestões que não foram solicitadas pelo humano, DEVE pedir aprovação com detalhamento e racional antes de implementar. Tarefas explicitamente solicitadas pelo humano podem ser executadas directamente.
 
 ### O9 — Instruction Persistence
 Quando o humano dá uma instrução, ela vale para TODA a sessão até ser explicitamente revogada. Se há dúvida se a instrução ainda vale, PERGUNTAR — nunca assumir que mudou.
@@ -144,8 +144,8 @@ Documentar decisões arquiteturais significativas no próprio repositório. O "p
 ### S4 — Azure Connection Gate
 NUNCA executar Connect-MgGraph, Connect-AzAccount, Connect-ExchangeOnline ou Connect-IPPSSession sem confirmação explícita do humano. Avisar qual tenant e escopo será atingido.
 
-### S5 — Infrastructure File Protection
-NUNCA tocar em arquivos de infraestrutura de segurança: `.pfx`, `.cer`, `.pem`, `.rdp`, `.key`. São artefatos intocáveis pelo agente.
+### S5 — [Removed]
+Regra removida por decisão do owner em 2026-03-10. Ficheiros de infraestrutura podem ser manipulados quando fizer sentido para o projecto.
 
 ### S6 — No Temp/Fix Scripts
 NUNCA criar scripts `temp-*` ou `fix-*` paralelos. Resolver no código original, editando cirurgicamente. Scripts paralelos geram entropia.
@@ -165,4 +165,4 @@ Consciência cross-project: mudança em um projeto MDE pode afetar outro. AVALIA
 - O agente DEVE referenciar estas regras quando tomar decisões
 - Violação de qualquer Proibição (P1-P8) é falha crítica
 
-**Version**: 1.0.1 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-03-10
+**Version**: 1.1.0 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-03-10
