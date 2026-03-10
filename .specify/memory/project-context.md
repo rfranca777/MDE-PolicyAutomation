@@ -45,12 +45,12 @@ and Microsoft Graph API.
 
 ## Known Technical Debt
 
-| ID | Violation | Description | Priority |
-|---|---|---|---|
-| TD-001 | S1 | Subscription IDs / Group IDs hardcoded in Fix-RegisterAndSync.ps1 | Medium |
-| TD-002 | S1 | Subscription IDs hardcoded in Deploy-MDE.ps1 | Medium |
-| TD-003 | S7 | Deprecated -vN files still exist in repo (history only) | Low |
+| ID | Violation | Description | Priority | Status |
+|---|---|---|---|---|
+| TD-001 | S1 | Subscription IDs / Group IDs hardcoded in Fix-RegisterAndSync.ps1 | Medium | ✅ RESOLVED 2026-03-10 — param() block added; defaults preserved for backward compat |
+| TD-002 | S1 | Subscription IDs hardcoded in Deploy-MDE.ps1 | Medium | ✅ CLOSED 2026-03-10 — verified compliant; uses `az account list` dynamic selection |
+| TD-003 | S7 | Deprecated -vN files still exist in repo (history only) | Low | ⚠️ ACCEPTED — intentional, DEPRECATED headers added; history only |
 
 ## Last Updated
 
-2026-03-10 | Session: PS 5.1 ISE compat + S7 remediation + constitution rollout
+2026-03-10 | Session: constitution v1.1.0 sync + TD-001 S1 remediation + runbook version align

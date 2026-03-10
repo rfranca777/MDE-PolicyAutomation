@@ -22,7 +22,7 @@
     - HTML report generation
     
 .NOTES
-    Version:  1.4.1 — Community Edition
+    Version:  1.5.0 — Community Edition
     Author:   Rafael França — github.com/rfranca777
     License:  MIT
     Project:  https://github.com/rfranca777/MDE-PolicyAutomation

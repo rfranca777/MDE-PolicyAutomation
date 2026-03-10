@@ -17,16 +17,27 @@
 #>
 
 #Requires -Version 5.1
+[CmdletBinding()]
+param(
+    # Override at call-site for non-Dev/TI tenants. Defaults = Sub_ELO_AZ__Dev/TI.
+    # Usage: .\Fix-RegisterAndSync.ps1 -Sub "<id>" -GrpMain "<id>" ...
+    [string]$Sub        = "121129d5-3986-447b-8a52-678b70ec6f76",  # Sub_ELO_AZ__Dev/TI
+    [string]$GrpMain    = "ed0829b1-26ba-4c2a-b33f-3a618c3e3255",  # grp-mde-main
+    [string]$GrpStale7  = "4a221a76-c2a4-4702-ab14-ea048d3f526b",  # grp-mde-stale7
+    [string]$GrpStale30 = "2de9c8f7-0bb1-4778-8d9c-4cf507527cf2",  # grp-mde-stale30
+    [string]$GrpEph     = "6d30e508-6e36-4d12-896e-e962d45d67d9"   # grp-mde-ephemeral
+)
 $ErrorActionPreference = "Continue"
 
 # ============================================================
 # CONFIG -- CLIENT TENANT (Sub_ELO_AZ__Dev/TI)
 # ============================================================
-$sub       = "121129d5-3986-447b-8a52-678b70ec6f76"
-$grpMain   = "ed0829b1-26ba-4c2a-b33f-3a618c3e3255"
-$grpStale7 = "4a221a76-c2a4-4702-ab14-ea048d3f526b"
-$grpStale30= "2de9c8f7-0bb1-4778-8d9c-4cf507527cf2"
-$grpEph    = "6d30e508-6e36-4d12-896e-e962d45d67d9"
+# Values sourced from params — override at call-site, not here (S1).
+$sub        = $Sub
+$grpMain    = $GrpMain
+$grpStale7  = $GrpStale7
+$grpStale30 = $GrpStale30
+$grpEph     = $GrpEph
 
 $manualMap = @{
     # "AzureVmName" = "EntraDeviceDisplayName"
