@@ -53,7 +53,7 @@ You have **multiple Azure subscriptions** with Windows VMs spread everywhere. Mi
 │    │  🤖  Azure Automation — Hourly sync, zero human intervention        │       │
 │    └──────────────────────────────────────────────────────────────────────┘       │
 │                                                                                  │
-│    v1.1.0 │ 14-Stage Full Automation │ MIT License │ PowerShell 5.1+             │
+│    v1.5.0 │ 14-Stage Full Automation │ MIT License │ PowerShell 5.1+             │
 │                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```

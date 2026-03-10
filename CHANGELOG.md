@@ -2,6 +2,34 @@
 
 All notable changes to MDE Policy Automation will be documented in this file.
 
+## [1.5.0] — 2026-03-10
+
+### Fixed (PS 5.1 ISE Compatibility)
+- **CRITICAL: `ConvertFrom-Json` fails in PS 5.1 ISE with az CLI output** — az returns
+  `System.Object[]` instead of a string. All JSON parsing now uses `Safe-AzJson` (file-based):
+  write to temp file → `[IO.File]::ReadAllText` → `ConvertFrom-Json -InputObject`.
+- **Graph OData URI mangling in PS 5.1 ISE** — `$filter` expressions with `physicalIds/any`
+  were mangled by PS 5.1 shell quoting. Fix: write full `az rest` command to a `.cmd` file
+  and execute via `cmd.exe /c`. Bypasses PowerShell interpolation entirely.
+- **Full-tenant device scan too slow** — previous versions fetched all Entra devices (10k+).
+  Now queries only devices from the target subscription via `physicalIds` filter.
+  Performance: minutes → seconds. Requires `ConsistencyLevel: eventual` header.
+
+### Added
+- **`Safe-AzJson` helper function** — universal PS 5.1/PS 7/Cloud Shell compatible JSON parser
+- **6-layer VM-to-Device matching** (L0–L6) in `Fix-RegisterAndSync.ps1`:
+  L0-Manual override, L1-physicalIds, L2-Exact, L3-Normalised, L4-NetBIOS, L5-Fuzzy (≥0.8), L6-vmId
+- **Direct group add (idempotent)** — no pre-check; Graph HTTP 400 "already member" treated as success
+- **ADR-001 through ADR-006** in `docs/ARCHITECTURE.md` — all architectural decisions documented
+- **`.specify/memory/project-context.md`** — canonical script map + tech debt register for agents
+
+### Changed (Constitution S7 Remediation)
+- `Fix-RegisterAndSync.ps1` — promoted to canonical with all v6 fixes (266 lines, production-ready)
+- `Deploy-MDE-v2.ps1` → **`Deploy-MDE.ps1`** — renamed via `git mv` (history preserved)
+- `Fix-RegisterAndSync-v2` through `Fix-v6.ps1` — marked DEPRECATED (git history only, do not run)
+- `.github/copilot-instructions.md` — added to enforce constitution in every AI agent session
+- Version bumped to 1.5.0
+
 ## [1.4.0] — 2026-03-08
 
 ### Added
