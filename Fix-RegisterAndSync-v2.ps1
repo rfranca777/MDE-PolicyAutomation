@@ -12,9 +12,9 @@
     L1: physicalIds contem Azure Resource ID da VM (99% exacto)
     L2: Nome exacto case-insensitive (95%)
     L3: Nome normalizado sem dominio/prefixo (90%)
-    L4: NetBIOS truncado 15 chars (85% — Windows trunca hostnames)
-    L5: Fuzzy match — contains/startsWith/endsWith (70%)
-    L6: Azure vmId == Entra deviceId (60% — quando MDE+AAD sincronizados)
+    L4: NetBIOS truncado 15 chars (85% -- Windows trunca hostnames)
+    L5: Fuzzy match -- contains/startsWith/endsWith (70%)
+    L6: Azure vmId == Entra deviceId (60% -- quando MDE+AAD sincronizados)
     
     Tambem:
     - Diagnostico completo: mostra TODOS os devices Entra com nomes similares
@@ -24,14 +24,14 @@
     
 .NOTES
     Version: 2.0.0
-    Author:  Rafael Franca — github.com/rfranca777
+    Author:  Rafael Franca -- github.com/rfranca777
     Date:    2026-03-09
 #>
 
 $ErrorActionPreference = "Continue"
 
 # ============================================================
-# CONFIGURACAO — ALTERAR CONFORME NECESSARIO
+# CONFIGURACAO -- ALTERAR CONFORME NECESSARIO
 # ============================================================
 $sub       = "fbb41bf3-dc95-4c71-8e14-396d3ed38b91"
 $grpMain   = "57290630-2627-4daa-9310-f21947a460f4"
@@ -39,7 +39,7 @@ $grpStale7 = "e24ed75b-df91-47e0-8eaf-2520d16531ec"
 $grpStale30= "ccbbd400-1ac2-4b59-937e-2bcdcac1e2df"
 $grpEph    = "82d42fb0-4ff4-4b1a-a71a-4b39ef6e0239"
 
-# Mapeamento manual — para VMs com nomes completamente diferentes no Entra ID
+# Mapeamento manual -- para VMs com nomes completamente diferentes no Entra ID
 # Formato: "AzureVmName" = "EntraDeviceDisplayName"
 # Preencher APENAS se houver VMs que nem o fuzzy match conseguir resolver
 $manualMap = @{
@@ -63,16 +63,16 @@ function Normalize-Deep {
     
     $n = $Name.Trim().ToLower()
     
-    # 1. Remover prefixo de dominio (DOMAIN\hostname → hostname)
+    # 1. Remover prefixo de dominio (DOMAIN\hostname -> hostname)
     if ($n -match '^[^\\]+\\(.+)$') { $n = $Matches[1] }
     
-    # 2. Remover sufixos de dominio (hostname.domain.local → hostname)
+    # 2. Remover sufixos de dominio (hostname.domain.local -> hostname)
     #    Cuidado: nao remover se o nome todo é o FQDN sem hostname separavel
     if ($n -match '^([^.]+)\.') { $n = $Matches[1] }
     
     # 3. Remover caracteres especiais que podem diferir entre sistemas
     #    Manter hifens e numeros (importantes para identidade)
-    $n = $n -replace '[_]', '-'         # normalizar underscore → hifen
+    $n = $n -replace '[_]', '-'         # normalizar underscore -> hifen
     $n = $n -replace '--+', '-'          # colapsar hifens duplos
     $n = $n -replace '^-|-$', ''         # remover hifens nas pontas
     
@@ -159,7 +159,7 @@ $vmsRaw = az vm list --subscription $sub --query "[].{name:name, rg:resourceGrou
 $vms = @()
 if ($vmsRaw) { $vms = @($vmsRaw | ConvertFrom-Json) }
 
-# Power state — batch query (MUITO mais rapido que get-instance-view por VM)
+# Power state -- batch query (MUITO mais rapido que get-instance-view por VM)
 $powerMap = @{}
 $powerRaw = az vm list --subscription $sub -d --query "[].{name:name, power:powerState}" -o json 2>$null
 if ($powerRaw) {
@@ -239,7 +239,7 @@ foreach ($vm in $vmDetails) {
     if ($manualMap.ContainsKey($vmName)) {
         $manualTarget = $manualMap[$vmName].ToLower()
         $dev = ($deviceIndex | Where-Object { $_.displayName.ToLower() -eq $manualTarget -and -not $usedDeviceIds.ContainsKey($_.id) }) | Select-Object -First 1
-        if ($dev) { $matchLayer = "L0-MANUAL"; $matchDetail = "Manual map: $vmName → $($dev.displayName)" }
+        if ($dev) { $matchLayer = "L0-MANUAL"; $matchDetail = "Manual map: $vmName -> $($dev.displayName)" }
     }
     
     # --- L1: physicalIds contem Azure Resource ID ---
@@ -280,7 +280,7 @@ foreach ($vm in $vmDetails) {
         }
     }
     
-    # --- L5: Fuzzy — contains / startsWith / endsWith ---
+    # --- L5: Fuzzy -- contains / startsWith / endsWith ---
     if (-not $dev) {
         # 5a: Device displayName contem VM name inteiro (ex: "vm-srv-01.contoso.com" contem "vm-srv-01")
         $candidates = @($deviceIndex | Where-Object { 
@@ -296,7 +296,7 @@ foreach ($vm in $vmDetails) {
             })
         }
         
-        # 5c: StartsWith match (nomes que comecam igual — muito comum em Azure VMs)
+        # 5c: StartsWith match (nomes que comecam igual -- muito comum em Azure VMs)
         if ($candidates.Count -eq 0) {
             $prefix = $vmNorm
             if ($prefix.Length -gt 6) { $prefix = $prefix.Substring(0, [Math]::Min(10, $prefix.Length)) }
@@ -355,7 +355,7 @@ foreach ($vm in $vmDetails) {
             default { "White" }
         }
         Write-Host "  [MATCH] $vmName" -ForegroundColor $color -NoNewline
-        Write-Host " → $($dev.displayName)" -ForegroundColor White -NoNewline
+        Write-Host " -> $($dev.displayName)" -ForegroundColor White -NoNewline
         Write-Host " ($matchLayer)" -ForegroundColor DarkGray
         Write-Host "          $matchDetail" -ForegroundColor DarkGray
     } else {
@@ -363,7 +363,7 @@ foreach ($vm in $vmDetails) {
         
         # Mostrar candidatos mais proximos para diagnostico
         Write-Host "  [MISS]  $vmName" -ForegroundColor Red -NoNewline
-        Write-Host " → SEM MATCH EM 6 CAMADAS" -ForegroundColor Red
+        Write-Host " -> SEM MATCH EM 6 CAMADAS" -ForegroundColor Red
         Write-Host "          Norm: '$vmNorm' | NetBIOS: '$vmNetBIOS'" -ForegroundColor DarkGray
         
         # Top 3 devices mais similares (para ajudar diagnostico manual)
@@ -378,7 +378,7 @@ foreach ($vm in $vmDetails) {
         if ($topSimilar.Count -gt 0) {
             Write-Host "          Candidatos mais proximos:" -ForegroundColor DarkYellow
             foreach ($ts in $topSimilar) {
-                Write-Host "            $($ts.score) — $($ts.device.displayName) (norm: $($ts.device.normalized))" -ForegroundColor DarkGray
+                Write-Host "            $($ts.score) -- $($ts.device.displayName) (norm: $($ts.device.normalized))" -ForegroundColor DarkGray
             }
         }
     }
@@ -408,7 +408,7 @@ foreach ($layer in ($layerStats.Keys | Sort-Object)) {
 if ($unmatched.Count -gt 0) {
     Write-Host "`n  VMs SEM MATCH:" -ForegroundColor Red
     foreach ($u in $unmatched) {
-        Write-Host "    $($u.name) ($($u.os)) — $($u.power)" -ForegroundColor Yellow
+        Write-Host "    $($u.name) ($($u.os)) -- $($u.power)" -ForegroundColor Yellow
     }
     Write-Host ""
     Write-Host "  DICA: Adicione estas VMs ao `$manualMap no topo do script" -ForegroundColor Yellow
@@ -428,12 +428,12 @@ foreach ($vm in $unmatched) {
     $extInstalled = az vm extension show --resource-group $vm.rg --vm-name $vm.name --name $extName --query "provisioningState" -o tsv 2>$null
     
     if ($extInstalled -eq "Succeeded") {
-        Write-Host "  [SKIP] $($vm.name) — extensao $extName ja instalada (device pode estar a propagar)" -ForegroundColor Gray
+        Write-Host "  [SKIP] $($vm.name) -- extensao $extName ja instalada (device pode estar a propagar)" -ForegroundColor Gray
     } elseif ($vm.power -match "deallocated|stopped") {
-        Write-Host "  [SKIP] $($vm.name) — VM desligada ($($vm.power)) — nao e possivel instalar" -ForegroundColor Yellow
+        Write-Host "  [SKIP] $($vm.name) -- VM desligada ($($vm.power)) -- nao e possivel instalar" -ForegroundColor Yellow
     } else {
         $needsExtension += $vm
-        Write-Host "  [NEED] $($vm.name) — extensao $extName nao encontrada" -ForegroundColor Yellow
+        Write-Host "  [NEED] $($vm.name) -- extensao $extName nao encontrada" -ForegroundColor Yellow
     }
 }
 
@@ -442,11 +442,11 @@ if ($needsExtension.Count -gt 0) {
     $installChoice = Read-Host
     
     if ($installChoice -match '^[Ss]') {
-        # PARALELO — todas as extensoes ao mesmo tempo via Start-Job
+        # PARALELO -- todas as extensoes ao mesmo tempo via Start-Job
         $jobs = @()
         foreach ($vm in $needsExtension) {
             $extType = if ($vm.os -eq "Windows") { "AADLoginForWindows" } else { "AADSSHLoginForLinux" }
-            Write-Host "  [$($vm.os)] $($vm.name) → Queued $extType" -ForegroundColor Yellow
+            Write-Host "  [$($vm.os)] $($vm.name) -> Queued $extType" -ForegroundColor Yellow
             $jobs += Start-Job -ScriptBlock {
                 param($rg,$name,$ext,$subId)
                 az account set --subscription $subId 2>$null
@@ -563,7 +563,7 @@ if ($needsExtension.Count -gt 0) {
             if ($dev) {
                 $usedDeviceIds[$dev.id] = $true
                 $newMatches += @{ vm = $vm; device = $dev; layer = $matchLayer; detail = "Retry apos extensao AAD" }
-                Write-Host "  [NOVO] $($vm.name) → $($dev.displayName) ($matchLayer)" -ForegroundColor Green
+                Write-Host "  [NOVO] $($vm.name) -> $($dev.displayName) ($matchLayer)" -ForegroundColor Green
             } else {
                 $stillUnmatched += $vm
             }
@@ -617,7 +617,7 @@ foreach ($m in $matched) {
             elseif ($daysAgo -gt 7) { $targetGroup = $grpStale7; $targetLabel = "Stale-7d" }
         } catch { }
     } else {
-        # Sem lastSignIn — basear no power state
+        # Sem lastSignIn -- basear no power state
         if ($vmPower -match "deallocated|stopped") {
             $targetGroup = $grpStale7; $targetLabel = "Stale-7d (desligada)"
         } else {
@@ -628,7 +628,7 @@ foreach ($m in $matched) {
     # Verificar se ja e membro (usando cache pre-carregado)
     $alreadyMember = $existingMembers[$targetGroup] | Where-Object { $_.id -eq $devId }
     if ($alreadyMember) {
-        Write-Host "  [=] $devName → ja no $targetLabel" -ForegroundColor Gray
+        Write-Host "  [=] $devName -> ja no $targetLabel" -ForegroundColor Gray
         $skipped++
         continue
     }
@@ -639,7 +639,7 @@ foreach ($m in $matched) {
         if ($otherId -eq $targetGroup) { continue }
         $otherMember = $existingMembers[$otherId] | Where-Object { $_.id -eq $devId }
         if ($otherMember) {
-            Write-Host "  [~] $devName → movendo de outro grupo para $targetLabel" -ForegroundColor Yellow
+            Write-Host "  [~] $devName -> movendo de outro grupo para $targetLabel" -ForegroundColor Yellow
             # Remover do grupo antigo
             az rest --method DELETE --uri "https://graph.microsoft.com/v1.0/groups/$otherId/members/$devId/`$ref" --output none 2>&1 | Out-Null
             $inOtherGroup = $true
@@ -655,7 +655,7 @@ foreach ($m in $matched) {
     az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups/$targetGroup/members/`$ref" --headers "Content-Type=application/json" --body "@$bodyFile" --output none 2>&1 | Out-Null
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  [+] $devName → $targetLabel" -ForegroundColor Green
+        Write-Host "  [+] $devName -> $targetLabel" -ForegroundColor Green
         switch ($targetGroup) {
             $grpMain    { $addedMain++ }
             $grpStale7  { $addedStale7++ }
@@ -663,7 +663,7 @@ foreach ($m in $matched) {
             $grpEph     { $addedEph++ }
         }
     } else {
-        Write-Host "  [!] $devName → erro ao adicionar (pode ja estar)" -ForegroundColor DarkYellow
+        Write-Host "  [!] $devName -> erro ao adicionar (pode ja estar)" -ForegroundColor DarkYellow
     }
 }
 
@@ -695,7 +695,7 @@ foreach ($gDef in @(
 # RELATORIO FINAL
 # ============================================================
 Write-Host "`n================================================================" -ForegroundColor Magenta
-Write-Host "  FIX v2 — RELATORIO FINAL" -ForegroundColor White
+Write-Host "  FIX v2 -- RELATORIO FINAL" -ForegroundColor White
 Write-Host "================================================================" -ForegroundColor Magenta
 Write-Host ""
 Write-Host "  INVENTARIO:" -ForegroundColor Cyan
@@ -725,20 +725,20 @@ Write-Host "    Total em grupos:     $totalInGroups" -ForegroundColor White
 Write-Host ""
 
 if ($unmatched.Count -gt 0) {
-    Write-Host "  ⚠ ACAO NECESSARIA PARA $($unmatched.Count) VMs:" -ForegroundColor Yellow
+    Write-Host "  [!] ACAO NECESSARIA PARA $($unmatched.Count) VMs:" -ForegroundColor Yellow
     Write-Host "" 
-    Write-Host "  Opcao A — Adicionar ao `$manualMap e reexecutar:" -ForegroundColor Yellow
+    Write-Host "  Opcao A -- Adicionar ao `$manualMap e reexecutar:" -ForegroundColor Yellow
     Write-Host ""
     foreach ($u in $unmatched) {
         Write-Host "    `$manualMap[`"$($u.name)`"] = `"???`"    # Verificar em Entra ID > Devices" -ForegroundColor DarkYellow
     }
     Write-Host ""
-    Write-Host "  Opcao B — Verificar manualmente:" -ForegroundColor Yellow
-    Write-Host "    1. Portal → Entra ID → Devices → procurar por nome" -ForegroundColor Gray
+    Write-Host "  Opcao B -- Verificar manualmente:" -ForegroundColor Yellow
+    Write-Host "    1. Portal -> Entra ID -> Devices -> procurar por nome" -ForegroundColor Gray
     Write-Host "    2. Verificar se a VM esta ligada (extensao AAD requer VM running)" -ForegroundColor Gray
     Write-Host "    3. Re-executar este script apos 5-10 min (propagacao)" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  Opcao C — Verificar via CLI:" -ForegroundColor Yellow
+    Write-Host "  Opcao C -- Verificar via CLI:" -ForegroundColor Yellow
     foreach ($u in $unmatched) {
         Write-Host "    az rest --method GET --uri `"https://graph.microsoft.com/v1.0/devices?`$filter=startswith(displayName,'$(($u.name).Substring(0,[Math]::Min(8,$u.name.Length)))')&`$select=displayName,id`" -o table" -ForegroundColor DarkGray
     }
@@ -752,14 +752,14 @@ Write-Host "================================================================`n" 
 # Export matching log para diagnostico
 $logFile = Join-Path $tempPath "mde-fix-v2-matching-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 $eqLine = "=" * 60
-$logContent = @("FIX v2 — MATCHING LOG — $(Get-Date)", $eqLine, "")
+$logContent = @("FIX v2 -- MATCHING LOG -- $(Get-Date)", $eqLine, "")
 foreach ($m in $matched) {
-    $logContent += "$($m.layer) | $($m.vm.name) → $($m.device.displayName) | $($m.detail)"
+    $logContent += "$($m.layer) | $($m.vm.name) -> $($m.device.displayName) | $($m.detail)"
 }
 $logContent += ""
 $logContent += "UNMATCHED:"
 foreach ($u in $unmatched) {
-    $logContent += "MISS | $($u.name) ($($u.os)) — $($u.power)"
+    $logContent += "MISS | $($u.name) ($($u.os)) -- $($u.power)"
 }
 $logContent | Out-File $logFile -Encoding UTF8 -Force
 Write-Host "  Log exportado: $logFile" -ForegroundColor Gray
