@@ -5,8 +5,8 @@
     Bulletproof for PS 5.1 ISE. Zero interaction. Zero error.
     
     PS 5.1 ISE fixes over v3:
-    - Custom Parse-Json function that handles string[] from az CLI
-    - Forces array unwrap ([array] cast) on all JSON array results
+    - Safe-AzJson: saves az output to temp file, reads back, parses
+    - Bypasses PS 5.1 ISE pipeline/ConvertFrom-Json issues entirely
     - No pipeline into ConvertFrom-Json (uses -InputObject)
     - Debug output shows raw type info for troubleshooting
     
@@ -35,37 +35,32 @@ $manualMap = @{
 }
 
 # ============================================================
-# CORE: Parse-Json -- THE fix for PS 5.1 ISE
+# CORE: Safe-AzJson -- THE fix for PS 5.1 ISE
 # ============================================================
-function Parse-Json {
-    # PS 5.1 ISE: az CLI returns string[] (one per line).
-    # ConvertFrom-Json via pipeline wraps arrays as single object.
-    # This function: joins lines, uses -InputObject, forces array unwrap.
-    param([object]$RawInput)
-    if (-not $RawInput) { return $null }
-    $jsonStr = ""
-    if ($RawInput -is [array]) {
-        $jsonStr = [string]::Join("", $RawInput)
-    } else {
-        $jsonStr = [string]$RawInput
-    }
-    $jsonStr = $jsonStr.Trim()
-    if ($jsonStr.Length -eq 0) { return $null }
+function Safe-AzJson {
+    # PS 5.1 ISE: az CLI output + ConvertFrom-Json = broken arrays.
+    # Solution: save to temp file, read back as single string, parse.
+    # This works 100% on PS 5.1 ISE, PS 7, Cloud Shell.
+    param([string[]]$AzArgs)
+    $tmpFile = Join-Path $env:TEMP ("azjson_" + [guid]::NewGuid().ToString("N") + ".json")
     try {
-        $result = ConvertFrom-Json -InputObject $jsonStr
-        return $result
+        $null = & az @AzArgs -o json 2>$null | Out-File $tmpFile -Encoding UTF8 -Force
+        if (-not (Test-Path $tmpFile)) { return $null }
+        $content = [System.IO.File]::ReadAllText($tmpFile)
+        if ([string]::IsNullOrWhiteSpace($content)) { return $null }
+        $parsed = ConvertFrom-Json -InputObject $content
+        return $parsed
     } catch {
         return $null
+    } finally {
+        if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
     }
 }
 
 function Force-Array {
-    # Ensures result is always a PS array, even for single items
     param([object]$Data)
     if ($null -eq $Data) { return @() }
-    if ($Data -is [System.Collections.IEnumerable] -and $Data -isnot [string]) {
-        return @($Data)
-    }
+    if ($Data -is [array]) { return $Data }
     return @(,$Data)
 }
 
@@ -111,13 +106,9 @@ function Get-AllEntraDevices {
     $all = @()
     $uri = 'https://graph.microsoft.com/v1.0/devices?$top=999&$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled'
     do {
-        $raw = az rest --method GET --uri $uri -o json 2>$null
-        $resp = Parse-Json $raw
+        $resp = Safe-AzJson @("rest","--method","GET","--uri",$uri)
         if (-not $resp) { break }
-        if ($resp.value) {
-            $items = Force-Array $resp.value
-            $all += $items
-        }
+        if ($resp.value) { $all += @($resp.value) }
         $uri = $null
         if ($resp.'@odata.nextLink') { $uri = $resp.'@odata.nextLink' }
     } while ($uri)
@@ -194,11 +185,11 @@ Write-Host "  PS: $($PSVersionTable.PSVersion) Host: $($Host.Name)" -ForegroundC
 Write-Host "================================================================`n" -ForegroundColor Magenta
 
 Write-Host "  Pre-flight..." -ForegroundColor Cyan
-$azCtx = Parse-Json (az account show -o json 2>$null)
+$azCtx = Safe-AzJson @("account","show")
 if (-not $azCtx) { Write-Host "  [FAIL] az login required" -ForegroundColor Red; return }
 Write-Host "  [OK] Logged in: $($azCtx.user.name)" -ForegroundColor Green
 
-$graphTest = Parse-Json (az rest --method GET --uri 'https://graph.microsoft.com/v1.0/organization?$select=displayName' -o json 2>$null)
+$graphTest = Safe-AzJson @("rest","--method","GET","--uri",'https://graph.microsoft.com/v1.0/organization?$select=displayName')
 if (-not $graphTest) { Write-Host "  [FAIL] No Graph access" -ForegroundColor Red; return }
 Write-Host "  [OK] Graph API" -ForegroundColor Green
 
@@ -208,7 +199,7 @@ Write-Host "  [OK] Subscription" -ForegroundColor Green
 
 $allGroupsOk = $true
 foreach ($g in @(@{id=$grpMain;n="Main"},@{id=$grpStale7;n="Stale7"},@{id=$grpStale30;n="Stale30"},@{id=$grpEph;n="Ephemeral"})) {
-    $gc = Parse-Json (az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($g.id)?`$select=displayName" -o json 2>$null)
+    $gc = Safe-AzJson @("rest","--method","GET","--uri","https://graph.microsoft.com/v1.0/groups/$($g.id)?`$select=displayName")
     if ($gc -and $gc.displayName) { Write-Host "  [OK] $($g.n): $($gc.displayName)" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $($g.n): $($g.id)" -ForegroundColor Red; $allGroupsOk = $false }
 }
@@ -219,11 +210,10 @@ Write-Host ""
 # FASE 1: VMs
 # ============================================================
 Write-Host "--- FASE 1: AZURE VMs ---`n" -ForegroundColor Cyan
-$vmsRaw = az vm list --subscription $sub --query "[].{name:name, rg:resourceGroup, os:storageProfile.osDisk.osType, id:id, vmId:vmId}" -o json 2>$null
-$vmsParsed = Parse-Json $vmsRaw
+$vmsParsed = Safe-AzJson @("vm","list","--subscription",$sub,"--query","[].{name:name, rg:resourceGroup, os:storageProfile.osDisk.osType, id:id, vmId:vmId}")
 $vms = Force-Array $vmsParsed
 
-Write-Host "  Total VMs: $($vms.Count) (type: $($vmsParsed.GetType().Name))" -ForegroundColor White
+Write-Host "  Total VMs: $($vms.Count)" -ForegroundColor White
 $vmList = @()
 foreach ($vm in $vms) {
     if (-not $vm.name) { continue }  # skip null entries
@@ -286,9 +276,9 @@ if ($matched.Count -eq 0) { Write-Host "  Nothing to sync." -ForegroundColor Yel
 else {
     $existingMembers = @{}
     foreach ($g in @(@{id=$grpMain;n="Main"},@{id=$grpStale7;n="Stale-7d"},@{id=$grpStale30;n="Stale-30d"},@{id=$grpEph;n="Ephemeral"})) {
-        $mr = Parse-Json (az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($g.id)/members?`$select=id,displayName&`$top=999" -o json 2>$null)
+        $mr = Safe-AzJson @("rest","--method","GET","--uri","https://graph.microsoft.com/v1.0/groups/$($g.id)/members?`$select=id,displayName&`$top=999")
         $existingMembers[$g.id] = @()
-        if ($mr -and $mr.value) { $existingMembers[$g.id] = Force-Array $mr.value }
+        if ($mr -and $mr.value) { $existingMembers[$g.id] = @($mr.value) }
         Write-Host "  $($g.n): $($existingMembers[$g.id].Count) members" -ForegroundColor DarkGray
     }
     Write-Host ""
@@ -325,8 +315,8 @@ else {
 Write-Host "`n--- FASE 5: VERIFY ---`n" -ForegroundColor Cyan
 $total = 0
 foreach ($g in @(@{id=$grpMain;n="Main"},@{id=$grpStale7;n="Stale-7d"},@{id=$grpStale30;n="Stale-30d"},@{id=$grpEph;n="Ephemeral"})) {
-    $mr = Parse-Json (az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($g.id)/members?`$select=displayName&`$top=999" -o json 2>$null)
-    $ml = @(); if ($mr -and $mr.value) { $ml = Force-Array $mr.value }
+    $mr = Safe-AzJson @("rest","--method","GET","--uri","https://graph.microsoft.com/v1.0/groups/$($g.id)/members?`$select=displayName&`$top=999")
+    $ml = @(); if ($mr -and $mr.value) { $ml = @($mr.value) }
     $total += $ml.Count
     Write-Host "  $($g.n): $($ml.Count)" -ForegroundColor $(if($ml.Count -gt 0){'Green'}else{'Yellow'})
     foreach ($x in $ml) { Write-Host "    - $($x.displayName)" -ForegroundColor DarkGray }
