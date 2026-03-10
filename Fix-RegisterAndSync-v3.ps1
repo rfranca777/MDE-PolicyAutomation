@@ -96,7 +96,7 @@ function Get-AllEntraDevices {
         $raw = az rest --method GET --uri $uri -o json 2>$null
         if (-not $raw) { break }
         $resp = $null
-        try { $resp = $raw | ConvertFrom-Json } catch { break }
+        try { $resp = ($raw -join '') | ConvertFrom-Json } catch { break }
         if ($resp -and $resp.value) { $all += $resp.value }
         $uri = $null
         if ($resp -and $resp.'@odata.nextLink') { $uri = $resp.'@odata.nextLink' }
@@ -217,7 +217,7 @@ Write-Host "================================================================`n" 
 
 # Validate az login
 Write-Host "  Pre-flight checks..." -ForegroundColor Cyan
-$azCtx = az account show -o json 2>$null | ConvertFrom-Json
+$azCtx = (az account show -o json 2>$null) -join '' | ConvertFrom-Json
 if (-not $azCtx) {
     Write-Host "  [FAIL] az login required. Run: az login" -ForegroundColor Red
     return
@@ -246,7 +246,7 @@ foreach ($gDef in @(
     @{id=$grpMain;n="Main"}, @{id=$grpStale7;n="Stale7"},
     @{id=$grpStale30;n="Stale30"}, @{id=$grpEph;n="Ephemeral"}
 )) {
-    $gCheck = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($gDef.id)?`$select=displayName" -o json 2>$null | ConvertFrom-Json
+    $gCheck = (az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($gDef.id)?`$select=displayName" -o json 2>$null) -join '' | ConvertFrom-Json
     if ($gCheck -and $gCheck.displayName) {
         Write-Host "  [OK] Group $($gDef.n): $($gCheck.displayName)" -ForegroundColor Green
     } else {
@@ -268,11 +268,11 @@ Write-Host "--- FASE 1: AZURE VMs ---`n" -ForegroundColor Cyan
 
 $vmsRaw = az vm list --subscription $sub --query "[].{name:name, rg:resourceGroup, os:storageProfile.osDisk.osType, id:id, vmId:vmId}" -o json 2>$null
 $vms = @()
-if ($vmsRaw) { try { $vms = @($vmsRaw | ConvertFrom-Json) } catch { $vms = @() } }
+if ($vmsRaw) { try { $vms = @(($vmsRaw -join '') | ConvertFrom-Json) } catch { $vms = @() } }
 
 $powerMap = @{}
 $powerRaw = az vm list --subscription $sub -d --query "[].{name:name, power:powerState}" -o json 2>$null
-if ($powerRaw) { try { ($powerRaw | ConvertFrom-Json) | ForEach-Object { $powerMap[$_.name] = $_.power } } catch {} }
+if ($powerRaw) { try { (($powerRaw -join '') | ConvertFrom-Json) | ForEach-Object { $powerMap[$_.name] = $_.power } } catch {} }
 
 $vmList = @()
 foreach ($vm in $vms) {
@@ -380,7 +380,7 @@ if ($matched.Count -eq 0) {
     )) {
         $mRaw = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($gDef.id)/members?`$select=id,displayName&`$top=999" -o json 2>$null
         $existingMembers[$gDef.id] = @()
-        if ($mRaw) { try { $parsed = $mRaw | ConvertFrom-Json; if ($parsed.value) { $existingMembers[$gDef.id] = $parsed.value } } catch {} }
+        if ($mRaw) { try { $parsed = ($mRaw -join '') | ConvertFrom-Json; if ($parsed.value) { $existingMembers[$gDef.id] = $parsed.value } } catch {} }
         Write-Host "  $($gDef.n): $($existingMembers[$gDef.id].Count) current members" -ForegroundColor DarkGray
     }
     Write-Host ""
@@ -458,7 +458,7 @@ foreach ($gDef in @(
 )) {
     $mRaw = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($gDef.id)/members?`$select=displayName&`$top=999" -o json 2>$null
     $members = @()
-    if ($mRaw) { try { $parsed = $mRaw | ConvertFrom-Json; if ($parsed.value) { $members = $parsed.value } } catch {} }
+    if ($mRaw) { try { $parsed = ($mRaw -join '') | ConvertFrom-Json; if ($parsed.value) { $members = $parsed.value } } catch {} }
     $totalInGroups += $members.Count
     Write-Host "  $($gDef.n): $($members.Count) devices" -ForegroundColor $(if($members.Count -gt 0){'Green'}else{'Yellow'})
     foreach ($mbr in $members) { Write-Host "    - $($mbr.displayName)" -ForegroundColor DarkGray }
