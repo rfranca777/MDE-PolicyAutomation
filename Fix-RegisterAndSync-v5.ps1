@@ -183,23 +183,37 @@ foreach ($v in $vms) {
 }
 if ($vmList.Count -eq 0) { Write-Host "  No VMs." -ForegroundColor Yellow; return }
 
-# FASE 2: DEVICES
-Write-Host "`n--- FASE 2: Entra Devices ---`n" -ForegroundColor Cyan
+# FASE 2: DEVICES -- targeted per VM (NOT full tenant scan)
+# Query per VM name via Graph $filter. Each result includes physicalIds,
+# so L1-physicalIds matching still works on the returned devices.
+# 28 VMs = ~28 fast queries instead of paging through 10k+ devices.
+Write-Host "`n--- FASE 2: Entra Devices (per VM) ---`n" -ForegroundColor Cyan
 $allDev = @()
-$pg = 0
-$uri = 'https://graph.microsoft.com/v1.0/devices?$top=999&$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled'
-do {
-    $pg++
-    Write-Host "  Page $pg..." -ForegroundColor Gray -NoNewline
-    $r = Safe-AzJson @("rest","--method","GET","--uri",$uri)
-    if (-not $r) { Write-Host " err" -ForegroundColor Red; break }
-    if ($r.value) { $items = @($r.value); $allDev += $items; Write-Host " $($items.Count) (total:$($allDev.Count))" -ForegroundColor Gray }
-    else { Write-Host " 0" -ForegroundColor Gray }
-    $uri = $null
-    if ($r.'@odata.nextLink') { $uri = $r.'@odata.nextLink' }
-} while ($uri)
-Write-Host "  Devices: $($allDev.Count)" -ForegroundColor White
-if ($allDev.Count -eq 0) { Write-Host "  No devices." -ForegroundColor Yellow; return }
+$seen = @{}
+$vmCount = $vmList.Count; $vmIdx = 0
+foreach ($vm in $vmList) {
+    $vmIdx++
+    $safeName = $vm.name -replace "'","''"
+    $nb = Get-NetBIOSName $vm.name
+    # Query 1: startswith with NetBIOS prefix (catches truncated names)
+    $prefix = if ($nb.Length -ge 3) { $nb } else { $safeName }
+    $uri1 = "https://graph.microsoft.com/v1.0/devices?`$filter=startswith(displayName,'$prefix')&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled&`$top=50"
+    $r1 = Safe-AzJson @("rest","--method","GET","--uri",$uri1)
+    if ($r1 -and $r1.value) {
+        foreach ($d in @($r1.value)) { if ($d.id -and -not $seen.ContainsKey($d.id)) { $seen[$d.id] = $true; $allDev += $d } }
+    }
+    # Query 2: exact match (case-insensitive, catches different-prefix names)
+    if ($safeName.ToLower() -ne $prefix.ToLower()) {
+        $uri2 = "https://graph.microsoft.com/v1.0/devices?`$filter=displayName eq '$safeName'&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled"
+        $r2 = Safe-AzJson @("rest","--method","GET","--uri",$uri2)
+        if ($r2 -and $r2.value) {
+            foreach ($d in @($r2.value)) { if ($d.id -and -not $seen.ContainsKey($d.id)) { $seen[$d.id] = $true; $allDev += $d } }
+        }
+    }
+    Write-Host "  [$vmIdx/$vmCount] $($vm.name) -> $($seen.Count) devices" -ForegroundColor Gray
+}
+Write-Host "  Total unique devices: $($allDev.Count)" -ForegroundColor White
+if ($allDev.Count -eq 0) { Write-Host "  No devices found." -ForegroundColor Yellow; return }
 
 $devIdx = @()
 foreach ($d in $allDev) {
