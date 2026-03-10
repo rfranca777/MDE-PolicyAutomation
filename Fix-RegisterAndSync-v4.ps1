@@ -102,16 +102,38 @@ function Get-Similarity {
     return [Math]::Round($maxLen / [Math]::Max($a1.Length, $b1.Length), 2)
 }
 
-function Get-AllEntraDevices {
+function Get-DevicesForVMs {
+    # Instead of fetching ALL tenant devices (can be 10k+), query per VM name.
+    # 28 VMs = 28 small queries, each returns 0-3 results. MUCH faster.
+    param([array]$VmNames)
     $all = @()
-    $uri = 'https://graph.microsoft.com/v1.0/devices?$top=999&$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled'
-    do {
+    $seen = @{}
+    foreach ($name in $VmNames) {
+        # Search by displayName starting with VM name (catches FQDN, NetBIOS variants)
+        $safeName = $name -replace "'","''"
+        $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=startswith(displayName,'$safeName')&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled&`$top=50"
         $resp = Safe-AzJson @("rest","--method","GET","--uri",$uri)
-        if (-not $resp) { break }
-        if ($resp.value) { $all += @($resp.value) }
-        $uri = $null
-        if ($resp.'@odata.nextLink') { $uri = $resp.'@odata.nextLink' }
-    } while ($uri)
+        if ($resp -and $resp.value) {
+            foreach ($d in @($resp.value)) {
+                if (-not $seen.ContainsKey($d.id)) {
+                    $seen[$d.id] = $true
+                    $all += $d
+                }
+            }
+        }
+        # Also search by exact match (case where startswith misses due to casing)
+        $uri2 = "https://graph.microsoft.com/v1.0/devices?`$filter=displayName eq '$safeName'&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled"
+        $resp2 = Safe-AzJson @("rest","--method","GET","--uri",$uri2)
+        if ($resp2 -and $resp2.value) {
+            foreach ($d in @($resp2.value)) {
+                if (-not $seen.ContainsKey($d.id)) {
+                    $seen[$d.id] = $true
+                    $all += $d
+                }
+            }
+        }
+    }
+    Write-Host "  Queried $($VmNames.Count) VM names, found $($all.Count) unique devices" -ForegroundColor Gray
     return ,$all
 }
 
@@ -227,10 +249,11 @@ if ($vmList.Count -eq 0) { Write-Host "  No VMs. Done." -ForegroundColor Yellow;
 # ============================================================
 # FASE 2: ENTRA DEVICES
 # ============================================================
-Write-Host "`n--- FASE 2: ENTRA DEVICES ---`n" -ForegroundColor Cyan
-$deviceList = Get-AllEntraDevices
-Write-Host "  Total devices: $($deviceList.Count)" -ForegroundColor White
-if ($deviceList.Count -eq 0) { Write-Host "  No devices. Done." -ForegroundColor Yellow; return }
+Write-Host "`n--- FASE 2: ENTRA DEVICES (targeted per VM) ---`n" -ForegroundColor Cyan
+$vmNames = @($vmList | ForEach-Object { $_.name })
+$deviceList = Get-DevicesForVMs -VmNames $vmNames
+Write-Host "  Devices found: $($deviceList.Count)" -ForegroundColor White
+if ($deviceList.Count -eq 0) { Write-Host "  No devices matched any VM name. Done." -ForegroundColor Yellow; return }
 
 $deviceIndex = @()
 foreach ($d in $deviceList) {
