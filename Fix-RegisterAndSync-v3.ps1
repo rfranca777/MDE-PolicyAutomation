@@ -91,7 +91,7 @@ function Get-Similarity {
 
 function Get-AllEntraDevices {
     $all = @()
-    $uri = "https://graph.microsoft.com/v1.0/devices?" + "`$top=999&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled"
+    $uri = 'https://graph.microsoft.com/v1.0/devices?$top=999&$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled'
     do {
         $raw = az rest --method GET --uri $uri -o json 2>$null
         if (-not $raw) { break }
@@ -423,9 +423,9 @@ if ($matched.Count -eq 0) {
         }
 
         # Add to target group
-        $body = "{`"@odata.id`":`"https://graph.microsoft.com/v1.0/directoryObjects/$devId`"}"
+        $body = '{"@odata.id":"https://graph.microsoft.com/v1.0/directoryObjects/' + $devId + '"}'
         $bodyFile = Join-Path $tempPath "add-member.json"
-        $body | Out-File $bodyFile -Encoding UTF8 -Force -NoNewline
+        [System.IO.File]::WriteAllText($bodyFile, $body)
 
         az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups/$targetGroup/members/`$ref" --headers "Content-Type=application/json" --body "@$bodyFile" --output none 2>&1 | Out-Null
 
@@ -483,7 +483,8 @@ Write-Host "================================================================`n" 
 
 # Export log
 $logFile = Join-Path $tempPath ("mde-fix-v3-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + ".log")
-$logLines = @("FIX v3 -- $(Get-Date)", ("=" * 50), "VMs:$($vmList.Count) Matched:$($matched.Count) Unmatched:$($unmatched.Count)", "")
+$separator = "=" * 50
+$logLines = @("FIX v3 -- $(Get-Date)", $separator, "VMs:$($vmList.Count) Matched:$($matched.Count) Unmatched:$($unmatched.Count)", "")
 foreach ($m in $matched) { $logLines += "$($m.layer) | $($m.vm.name) -> $($m.device.displayName)" }
 $logLines += ""
 foreach ($u in $unmatched) { $logLines += "MISS | $($u.name) [$($u.os)] $($u.rg)" }
