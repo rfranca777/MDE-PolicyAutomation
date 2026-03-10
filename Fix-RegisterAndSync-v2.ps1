@@ -1,4 +1,9 @@
 <#
+# =======================================================================
+# DEPRECATED — Use Fix-RegisterAndSync.ps1 (canonical)
+# This file is kept for git history reference only.
+# Do NOT run or modify — it will be removed in a future cleanup.
+# =======================================================================
 .SYNOPSIS
     FIX v2: Deep Name Matching + Registar VMs + Popular Grupos Entra ID
 .DESCRIPTION
@@ -20,7 +25,7 @@
     - Diagnostico completo: mostra TODOS os devices Entra com nomes similares
     - Instala extensao AAD nas VMs sem device
     - Adiciona devices aos 4 grupos (main/stale7/stale30/ephemeral)
-    - Mapeamento manual para casos impossíveis de automatizar
+    - Mapeamento manual para casos imposs?veis de automatizar
     
 .NOTES
     Version: 2.0.0
@@ -67,7 +72,7 @@ function Normalize-Deep {
     if ($n -match '^[^\\]+\\(.+)$') { $n = $Matches[1] }
     
     # 2. Remover sufixos de dominio (hostname.domain.local -> hostname)
-    #    Cuidado: nao remover se o nome todo é o FQDN sem hostname separavel
+    #    Cuidado: nao remover se o nome todo ? o FQDN sem hostname separavel
     if ($n -match '^([^.]+)\.') { $n = $Matches[1] }
     
     # 3. Remover caracteres especiais que podem diferir entre sistemas
@@ -306,7 +311,7 @@ foreach ($vm in $vmDetails) {
             })
         }
         
-        # Se temos exactamente 1 candidato, é match. Se >1, pegar o mais similar
+        # Se temos exactamente 1 candidato, ? match. Se >1, pegar o mais similar
         if ($candidates.Count -eq 1) {
             $dev = $candidates[0]
             $matchLayer = "L5-FUZZY"

@@ -1,3 +1,49 @@
+﻿<!--
+SYNC IMPACT REPORT
+Generated : 2026-03-10 | Agent: GitHub Copilot (Claude Sonnet 4.6)
+
+Version Change : 1.0.0 → 1.0.1 (PATCH)
+Bump Rationale : Added Sync Impact Report header; no substantive principle changes.
+
+Modified Principles : none
+Added Sections     : none (HTML comment report prepended)
+Removed Sections   : none
+
+Validation
+  ✅ No unexplained bracket tokens remaining
+  ✅ Version line matches this report (1.0.1)
+  ✅ Dates in ISO format YYYY-MM-DD
+  ✅ All principles are declarative and testable
+  ✅ "should" language absent — directives use SEMPRE/NUNCA (MUST/NEVER)
+
+Templates Reviewed
+  ✅ .specify/templates/constitution-template.md
+       Source template reviewed; project constitution intentionally diverges
+       (4 concrete sections with 30 rules vs. minimal 5-principle template).
+  ✅ .specify/templates/plan-template.md
+       Constitution Check section uses [Gates determined based on constitution
+       file] — correct by design; evaluated per feature at plan time.
+       No outdated agent-specific references found.
+  ✅ .specify/templates/spec-template.md
+       No direct principle cross-references; no updates required.
+  ✅ .specify/templates/tasks-template.md
+       Task categories (setup, foundation, US phases) do not conflict with
+       any constitution principle; no updates required.
+  ✅ .specify/templates/agent-file-template.md
+       No principle cross-references; no updates required.
+  ✅ .specify/templates/checklist-template.md
+       No principle cross-references; no updates required.
+  ⚠️ .specify/templates/commands/
+       Directory does not exist — no command files to review.
+
+Known Pre-existing Anti-patterns (NOT constitution violations introduced today)
+  - Fix-RegisterAndSync-v*.ps1 files violate S7 (Git Versioning Only)
+  - Deploy-MDE-v2.ps1 violates S7
+  Both are legacy artefacts; remediation tracked in git history.
+
+Deferred TODOs : none
+-->
+
 # rfranca Security & DevOps Projects — Constitution
 
 > **Owner**: rfranca (labv10\rfranca)
@@ -119,4 +165,4 @@ Consciência cross-project: mudança em um projeto MDE pode afetar outro. AVALIA
 - O agente DEVE referenciar estas regras quando tomar decisões
 - Violação de qualquer Proibição (P1-P8) é falha crítica
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-03-06
+**Version**: 1.0.1 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-03-10

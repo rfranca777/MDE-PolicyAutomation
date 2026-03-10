@@ -1,6 +1,6 @@
-<#
+﻿<#
 .SYNOPSIS
-    MDE Policy Automation v2.1 — 10-Stage Direct Deployment (No Automation Account)
+    MDE Policy Automation v2.1 - 10-Stage Direct Deployment (No Automation Account)
     
 .DESCRIPTION
     Simplified deployment for Microsoft Defender for Endpoint:
@@ -32,7 +32,7 @@
     
 .NOTES
     Version:  2.1.0
-    Author:   Rafael Franca — github.com/rfranca777
+    Author:   Rafael Franca - github.com/rfranca777
     License:  MIT
     
     TECHNICAL NOTES:
@@ -42,7 +42,7 @@
     - MDE→Entra correlation (Stage 10) uses 3 layers:
       L1: MDE.aadDeviceId == Entra.deviceId (95% exact)
       L2: Normalized name match (80% fallback)
-      L3: Approximate name match — contains/startsWith (70% fallback)
+      L3: Approximate name match - contains/startsWith (70% fallback)
     - AAD extensions installed in parallel batches of 10 (ARM throttle safe)
     - Groups are static (not dynamic) to enable per-subscription segmentation
     - MDE API rate limiting: 500ms between tag operations
@@ -94,11 +94,13 @@ function Normalize-Name {
 }
 
 function Get-AllEntraDevices {
-    # Paginated Graph API fetch — handles tenants with >999 devices
+    # Paginated Graph API fetch - handles tenants with >999 devices
     $allDevices = @()
     $uri = "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime"
     do {
-        $response = az rest --method GET --uri $uri -o json 2>$null | ConvertFrom-Json
+        $responseRaw = az rest --method GET --uri $uri -o json 2>$null
+        $response = $null
+        if ($responseRaw) { $response = $responseRaw | ConvertFrom-Json }
         if ($response -and $response.value) {
             $allDevices += $response.value
         }
@@ -127,7 +129,9 @@ Write-Host "============================================================`n" -For
 Write-Host "[1/10] AUTENTICACAO E SUBSCRICAO" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
-$currentContext = az account show 2>$null | ConvertFrom-Json
+$currentContextRaw = az account show 2>$null
+$currentContext = $null
+if ($currentContextRaw) { $currentContext = $currentContextRaw | ConvertFrom-Json }
 if (-not $currentContext) {
     Write-Step "Azure CLI nao autenticado. Execute: az login" "ERROR"
     exit 1
@@ -136,7 +140,8 @@ Write-Step "Autenticado: $($currentContext.user.name)" "OK"
 Write-Tech "Tenant: $($currentContext.tenantId)"
 
 $subsRaw = az account list --query "[].{Name:name, Id:id, State:state}" -o json 2>$null
-$subsAll = $subsRaw | ConvertFrom-Json
+$subsAll = @()
+if ($subsRaw) { $subsAll = $subsRaw | ConvertFrom-Json }
 $subscriptions = @($subsAll | Where-Object { $_.State -eq "Enabled" })
 
 if ($subscriptions.Count -eq 0) { Write-Step "Nenhuma subscription ativa" "ERROR"; exit 1 }
@@ -208,8 +213,10 @@ foreach ($gDef in @(
     @{ Name = "grp-mde-global-ephemeral"; Tag = "ephemeral"; Desc = "MDE Global - Ephemeral (all subscriptions)" }
 )) {
     $gn = $gDef.Name
-    $check = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$gn'" -o json 2>$null | ConvertFrom-Json
-    if ($check.value.Count -gt 0) {
+    $checkRaw = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$gn'" -o json 2>$null
+    $check = $null
+    if ($checkRaw) { $check = $checkRaw | ConvertFrom-Json }
+    if ($check -and $check.value -and $check.value.Count -gt 0) {
         $globalGroupIds[$gDef.Tag] = $check.value[0].id
         Write-Step "Global $($gDef.Tag): $gn (reutilizado)" "OK"
     } else {
@@ -218,7 +225,9 @@ foreach ($gDef in @(
         $body = @{ displayName=$gn; mailNickname=$mailNick; mailEnabled=$false; securityEnabled=$true; description=$gDef.Desc } | ConvertTo-Json
         $bodyFile = Join-Path $tempPath "grp-global-$($gDef.Tag).json"
         $body | Out-File $bodyFile -Encoding UTF8 -Force -NoNewline
-        $newGrp = az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups" --headers "Content-Type=application/json" --body "@$bodyFile" -o json 2>$null | ConvertFrom-Json
+        $newGrpRaw = az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups" --headers "Content-Type=application/json" --body "@$bodyFile" -o json 2>$null
+        $newGrp = $null
+        if ($newGrpRaw) { $newGrp = $newGrpRaw | ConvertFrom-Json }
         if ($newGrp -and $newGrp.id) {
             $globalGroupIds[$gDef.Tag] = $newGrp.id
             Write-Step "Global $($gDef.Tag): Criado ($($newGrp.id))" "OK"
@@ -270,9 +279,11 @@ Write-Step "Policy: $policyName" "INFO"
 Write-Host "`n[3/10] RESOURCE GROUP" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
-$existingRg = az group show --name $resourceGroupName 2>$null | ConvertFrom-Json
+$existingRgRaw = az group show --name $resourceGroupName 2>$null
+$existingRg = $null
+if ($existingRgRaw) { $existingRg = $existingRgRaw | ConvertFrom-Json }
 if ($existingRg) {
-    Write-Step "RG existente — atualizando tags" "OK"
+    Write-Step "RG existente - atualizando tags" "OK"
     az group update --name $resourceGroupName --tags $tags --output none 2>$null
 } else {
     Write-Step "Criando RG..." "WAIT"
@@ -296,8 +307,10 @@ foreach ($grpDef in @(
     @{ Name = $entraGroupEphemeralName; Tag = "eph"; Desc = "MDE Ephemeral - $subscriptionName" }
 )) {
     $gn = $grpDef.Name
-    $check = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$gn'" -o json 2>$null | ConvertFrom-Json
-    if ($check.value.Count -gt 0) {
+    $checkRaw = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$gn'" -o json 2>$null
+    $check = $null
+    if ($checkRaw) { $check = $checkRaw | ConvertFrom-Json }
+    if ($check -and $check.value -and $check.value.Count -gt 0) {
         $groupIds[$grpDef.Tag] = $check.value[0].id
         Write-Step "$($grpDef.Tag): $gn (reutilizado)" "OK"
     } else {
@@ -307,7 +320,9 @@ foreach ($grpDef in @(
         $body = @{ displayName=$gn; mailNickname=$mailNick; mailEnabled=$false; securityEnabled=$true; description=$grpDef.Desc } | ConvertTo-Json
         $bodyFile = Join-Path $tempPath "grp-$($grpDef.Tag).json"
         $body | Out-File $bodyFile -Encoding UTF8 -Force -NoNewline
-        $newGrp = az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups" --headers "Content-Type=application/json" --body "@$bodyFile" -o json 2>$null | ConvertFrom-Json
+        $newGrpRaw = az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups" --headers "Content-Type=application/json" --body "@$bodyFile" -o json 2>$null
+        $newGrp = $null
+        if ($newGrpRaw) { $newGrp = $newGrpRaw | ConvertFrom-Json }
         if ($newGrp -and $newGrp.id) {
             $groupIds[$grpDef.Tag] = $newGrp.id
             Write-Step "$($grpDef.Tag): Criado ($($newGrp.id))" "OK"
@@ -323,7 +338,7 @@ $groupIdStale7 = $groupIds["stale7"]
 $groupIdStale30= $groupIds["stale30"]
 $groupIdEph    = $groupIds["eph"]
 
-if (-not $groupId) { Write-Step "Grupo main nao criado — pulando subscription" "ERROR"; continue }
+if (-not $groupId) { Write-Step "Grupo main nao criado - pulando subscription" "ERROR"; continue }
 
 # ============================================================
 # STAGE 5: AAD EXTENSION + DEVICE REGISTRATION
@@ -351,9 +366,9 @@ $mdeMatchApprox = 0
 $mdeNoMatch = 0
 
 if ($vms.Count -eq 0) {
-    Write-Step "Nenhuma VM encontrada — pulando Stages 5, 6 e 10" "SKIP"
+    Write-Step "Nenhuma VM encontrada - pulando Stages 5, 6 e 10" "SKIP"
 } else {
-    # Listar devices Entra ID (paginado — suporta >999 devices)
+    # Listar devices Entra ID (paginado - suporta >999 devices)
     $deviceList = Get-AllEntraDevices
     Write-Step "Devices no Entra ID: $($deviceList.Count)" "INFO"
 
@@ -394,7 +409,7 @@ if ($vms.Count -eq 0) {
 
             Write-Host "     Queued: $vmNm ($extType)" -ForegroundColor Gray
 
-            # Batch de 10 — aguardar antes do proximo batch
+            # Batch de 10 - aguardar antes do proximo batch
             if ($jobs.Count % 10 -eq 0) {
                 Write-Tech "Aguardando batch de 10..."
                 $jobs | Wait-Job -Timeout 600 | Out-Null
@@ -712,7 +727,7 @@ if ($appId) {
             }
         }
     } else {
-        Write-Step "WindowsDefenderATP SP nao encontrado — Stage 10 pode falhar" "SKIP"
+        Write-Step "WindowsDefenderATP SP nao encontrado - Stage 10 pode falhar" "SKIP"
         Write-Tech "Verifique se MDE esta ativado: security.microsoft.com"
     }
 }
@@ -727,10 +742,10 @@ Write-Tech "Rate limiting: 500ms entre chamadas MDE API"
 Write-Tech "Correlacao 3 camadas: aadDeviceId → nome exato → nome aproximado"
 
 if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
-    if (-not $appId) { Write-Step "Sem App Registration — pulando" "SKIP" }
-    if ($matched.Count -eq 0) { Write-Step "Sem devices matched — pulando" "SKIP" }
+    if (-not $appId) { Write-Step "Sem App Registration - pulando" "SKIP" }
+    if ($matched.Count -eq 0) { Write-Step "Sem devices matched - pulando" "SKIP" }
 } else {
-    # 10a: Gerar Client Secret via Graph API (addPassword — nao reseta existentes)
+    # 10a: Gerar Client Secret via Graph API (addPassword - nao reseta existentes)
     $tenantId = $currentContext.tenantId
     $secretDisplayName = "MDE-Auto-$(Get-Date -Format 'yyyyMMdd-HHmm')"
     $secretEndDate = (Get-Date).AddYears(1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -742,7 +757,9 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
     } | ConvertTo-Json -Depth 3
     $secretFile = Join-Path $tempPath "secret-body.json"
     $secretBody | Out-File $secretFile -Encoding UTF8 -Force -NoNewline
-    $secretResult = az rest --method POST --uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/addPassword" --headers "Content-Type=application/json" --body "@$secretFile" -o json 2>$null | ConvertFrom-Json
+    $secretResultRaw = az rest --method POST --uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/addPassword" --headers "Content-Type=application/json" --body "@$secretFile" -o json 2>$null
+    $secretResult = $null
+    if ($secretResultRaw) { $secretResult = $secretResultRaw | ConvertFrom-Json }
     $clientSecret = $null
     if ($secretResult) { $clientSecret = $secretResult.secretText }
 
@@ -750,7 +767,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
         Write-Step "Falha ao gerar Client Secret" "ERROR"
     } else {
         Write-Step "Client Secret gerado ($secretDisplayName)" "OK"
-        Write-Tech "Expira em 1 ano. Nao e armazenado — gere novo na proxima execucao."
+        Write-Tech "Expira em 1 ano. Nao e armazenado - gere novo na proxima execucao."
 
         # 10b: Aguardar propagacao do consent
         Write-Step "Aguardando propagacao de permissoes (15s)..." "WAIT"
@@ -758,7 +775,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
 
         # 10c: Obter token MDE (com retry)
         $encodedSecret = [System.Uri]::EscapeDataString($clientSecret)
-        $tokenBody = "client_id=$appId&client_secret=$encodedSecret&scope=https%3A%2F%2Fapi.security.microsoft.com%2F.default&grant_type=client_credentials"
+        $tokenBody = "client_id=" + $appId + "&client_secret=" + $encodedSecret + "&scope=https%3A%2F%2Fapi.security.microsoft.com%2F.default&grant_type=client_credentials"
         $mdeToken = $null
         $tokenRetries = 3
         for ($retry = 1; $retry -le $tokenRetries; $retry++) {
@@ -767,7 +784,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
                 $mdeToken = $tokenResponse.access_token
                 break
             } catch {
-                Write-Step "Token tentativa $retry/$tokenRetries — aguardando 10s..." "WAIT"
+                Write-Step "Token tentativa $retry/$tokenRetries - aguardando 10s..." "WAIT"
                 Start-Sleep -Seconds 10
             }
         }
@@ -811,7 +828,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
                 $mdeMachine = $null
                 $matchLayer = ""
 
-                # LAYER 1: MDE.aadDeviceId == Entra.deviceId (exato — 95%)
+                # LAYER 1: MDE.aadDeviceId == Entra.deviceId (exato - 95%)
                 if ($devDeviceId) {
                     $mdeMachine = $mdeMachines | Where-Object { $_.aadDeviceId -eq $devDeviceId } | Select-Object -First 1
                     if ($mdeMachine) { $matchLayer = "L1-deviceId" }
@@ -823,7 +840,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
                     if ($mdeMachine) { $matchLayer = "L2-name" }
                 }
 
-                # LAYER 3: Nome aproximado — contains / startsWith (70%)
+                # LAYER 3: Nome aproximado - contains / startsWith (70%)
                 if (-not $mdeMachine -and $devNameNorm.Length -ge 3) {
                     $mdeMachine = $mdeMachines | Where-Object {
                         $mdeNorm = Normalize-Name $_.computerDnsName

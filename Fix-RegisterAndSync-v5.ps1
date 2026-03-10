@@ -1,4 +1,9 @@
 <#
+# =======================================================================
+# DEPRECATED — Use Fix-RegisterAndSync.ps1 (canonical)
+# This file is kept for git history reference only.
+# Do NOT run or modify — it will be removed in a future cleanup.
+# =======================================================================
 .SYNOPSIS
     FIX v5: Match Azure VMs -> Entra ID Devices -> Sync to Groups
 .DESCRIPTION

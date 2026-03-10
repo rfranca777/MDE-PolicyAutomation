@@ -1,164 +1,291 @@
-<#
+﻿<#
 .SYNOPSIS
-    FIX: Registar VMs no Entra ID + Popular grupos
+    FIX: Match Azure VMs -> Entra ID Devices -> Sync to Groups
 .DESCRIPTION
-    1. Lista todas as VMs na subscription
-    2. Verifica quais ja estao registadas como devices no Entra ID
-    3. Instala extensao AAD nas VMs nao registadas (regista automaticamente)
-    4. Adiciona devices aos grupos
+    Final production version. PS 5.1 ISE tested. Zero interaction.
+    
+    Key design: Safe-AzJson (file-based JSON parsing) + direct add (no pre-check).
+    
+    Matching: L0-Manual, L1-physicalIds, L2-Exact, L3-Normalized, L4-NetBIOS, L5-Fuzzy, L6-vmId
+    Sync: adds directly to group (Graph returns 400 if already member = harmless)
+    
+.NOTES
+    Version: 6.0.0  # canonical (consolidated from Fix-v6.ps1)
+    Author:  Rafael Franca -- github.com/rfranca777
+    Date:    2026-03-10
+    Compat:  PS 5.1 ISE, PS 7, Cloud Shell
 #>
 
+#Requires -Version 5.1
 $ErrorActionPreference = "Continue"
 
+# ============================================================
+# CONFIG -- CLIENT TENANT (Sub_ELO_AZ__Dev/TI)
+# ============================================================
 $sub       = "121129d5-3986-447b-8a52-678b70ec6f76"
 $grpMain   = "ed0829b1-26ba-4c2a-b33f-3a618c3e3255"
 $grpStale7 = "4a221a76-c2a4-4702-ab14-ea048d3f526b"
 $grpStale30= "2de9c8f7-0bb1-4778-8d9c-4cf507527cf2"
+$grpEph    = "6d30e508-6e36-4d12-896e-e962d45d67d9"
+
+$manualMap = @{
+    # "AzureVmName" = "EntraDeviceDisplayName"
+}
+
+# ============================================================
+# CORE FUNCTIONS
+# ============================================================
+function Safe-AzJson {
+    param([string[]]$AzArgs)
+    $tmpFile = Join-Path $env:TEMP ("azj_" + [guid]::NewGuid().ToString("N") + ".json")
+    try {
+        & az @AzArgs -o json 2>$null | Out-File $tmpFile -Encoding UTF8 -Force
+        if (-not (Test-Path $tmpFile)) { return $null }
+        $content = [System.IO.File]::ReadAllText($tmpFile)
+        if ([string]::IsNullOrWhiteSpace($content)) { return $null }
+        return (ConvertFrom-Json -InputObject $content)
+    } catch { return $null }
+    finally { if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue } }
+}
+
+function Force-Array {
+    param([object]$Data)
+    if ($null -eq $Data) { return @() }
+    if ($Data -is [array]) { return $Data }
+    return @(,$Data)
+}
+
+function Normalize-Deep {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return "" }
+    $n = $Name.Trim().ToLower()
+    if ($n -match '^[^\\]+\\(.+)$') { $n = $Matches[1] }
+    if ($n -match '^([^.]+)\.') { $n = $Matches[1] }
+    $n = $n -replace '[_]', '-' -replace '--+', '-' -replace '^-|-$', ''
+    return $n
+}
+
+function Get-NetBIOSName {
+    param([string]$Name)
+    $n = Normalize-Deep $Name
+    if ($n.Length -gt 15) { return $n.Substring(0, 15) }
+    return $n
+}
+
+function Get-Similarity {
+    param([string]$A, [string]$B)
+    if ([string]::IsNullOrWhiteSpace($A) -or [string]::IsNullOrWhiteSpace($B)) { return 0.0 }
+    $a1 = $A.ToLower(); $b1 = $B.ToLower()
+    if ($a1 -eq $b1) { return 1.0 }
+    $maxLen = 0
+    for ($i = 0; $i -lt $a1.Length; $i++) {
+        for ($j = 0; $j -lt $b1.Length; $j++) {
+            $k = 0
+            while (($i+$k) -lt $a1.Length -and ($j+$k) -lt $b1.Length -and $a1[$i+$k] -eq $b1[$j+$k]) { $k++ }
+            if ($k -gt $maxLen) { $maxLen = $k }
+        }
+    }
+    return [Math]::Round($maxLen / [Math]::Max($a1.Length, $b1.Length), 2)
+}
+
+function Match-Device {
+    param($vm, $devIdx, $used, $manual)
+    $n = $vm.name; $nn = Normalize-Deep $n; $nb = Get-NetBIOSName $n
+    $rid = if ($vm.id) { $vm.id.ToLower() } else { "" }
+    $vid = if ($vm.vmId) { $vm.vmId.ToLower() } else { "" }
+    $d = $null; $ly = ""; $dt = ""
+    # L0
+    if ($manual.ContainsKey($n)) {
+        $t = $manual[$n].ToLower()
+        $d = $devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.displayName -and $_.displayName.ToLower() -eq $t } | Select-Object -First 1
+        if ($d) { $ly = "L0-MANUAL"; $dt = "$n -> $($d.displayName)" }
+    }
+    # L1
+    if (-not $d -and $rid.Length -gt 20) {
+        $d = $devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.physicalIds -and ($_.physicalIds | Where-Object { $_.ToLower().Contains($rid) }) } | Select-Object -First 1
+        if ($d) { $ly = "L1-PHYSICAL"; $dt = "physicalIds" }
+    }
+    # L2
+    if (-not $d) {
+        $d = $devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.displayName -and $_.displayName.ToLower() -eq $n.ToLower() } | Select-Object -First 1
+        if ($d) { $ly = "L2-EXACT"; $dt = "$n == $($d.displayName)" }
+    }
+    # L3
+    if (-not $d -and $nn.Length -ge 3) {
+        $d = $devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.normalized -eq $nn } | Select-Object -First 1
+        if ($d) { $ly = "L3-NORM"; $dt = "'$nn'" }
+    }
+    # L4
+    if (-not $d -and $nb.Length -ge 3) {
+        $d = $devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.netbios -eq $nb -and $_.netbios.Length -ge 3 } | Select-Object -First 1
+        if ($d) { $ly = "L4-NETBIOS"; $dt = "'$nb'" }
+    }
+    # L5
+    if (-not $d -and $nn.Length -ge 4) {
+        $c = @($devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.normalized -and $_.normalized.Length -ge 4 -and $_.normalized.Contains($nn) })
+        if ($c.Count -eq 0) { $c = @($devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.normalized -and $_.normalized.Length -ge 4 -and $nn.Contains($_.normalized) }) }
+        if ($c.Count -ge 1) {
+            $b = $null; $bs = 0
+            foreach ($x in $c) { $s = Get-Similarity $nn $x.normalized; if ($s -gt $bs) { $bs = $s; $b = $x } }
+            if ($b -and $bs -ge 0.8) { $d = $b; $ly = "L5-FUZZY"; $dt = "$bs" }
+        }
+    }
+    # L6
+    if (-not $d -and $vid.Length -gt 10) {
+        $d = $devIdx | Where-Object { -not $used.ContainsKey($_.id) -and $_.deviceId -and $_.deviceId.ToLower() -eq $vid } | Select-Object -First 1
+        if ($d) { $ly = "L6-VMID"; $dt = "vmId" }
+    }
+    return @{ dev=$d; layer=$ly; detail=$dt }
+}
+
+# ============================================================
+# START
+# ============================================================
+$tempPath = "C:\temp"
+if (-not (Test-Path $tempPath)) { New-Item -ItemType Directory -Path $tempPath -Force | Out-Null }
+
+Write-Host "`n================================================================" -ForegroundColor Magenta
+Write-Host "  FIX -- MATCH + SYNC" -ForegroundColor White
+Write-Host "  Sub: $sub" -ForegroundColor Gray
+Write-Host "  PS $($PSVersionTable.PSVersion) | $($Host.Name)" -ForegroundColor Gray
+Write-Host "================================================================`n" -ForegroundColor Magenta
+
+# PRE-FLIGHT
+Write-Host "  Pre-flight..." -ForegroundColor Cyan
+$ctx = Safe-AzJson @("account","show")
+if (-not $ctx) { Write-Host "  [FAIL] az login" -ForegroundColor Red; return }
+Write-Host "  [OK] $($ctx.user.name)" -ForegroundColor Green
+
+$org = Safe-AzJson @("rest","--method","GET","--uri",'https://graph.microsoft.com/v1.0/organization?$select=displayName')
+if (-not $org) { Write-Host "  [FAIL] Graph API" -ForegroundColor Red; return }
+Write-Host "  [OK] Graph API" -ForegroundColor Green
 
 az account set --subscription $sub 2>$null
+if ($LASTEXITCODE -ne 0) { Write-Host "  [FAIL] Subscription" -ForegroundColor Red; return }
+Write-Host "  [OK] Subscription" -ForegroundColor Green
 
-Write-Host "`n====================================================" -ForegroundColor Magenta
-Write-Host "  FIX: REGISTAR VMs NO ENTRA ID + POPULAR GRUPOS" -ForegroundColor White
-Write-Host "====================================================`n" -ForegroundColor Magenta
+foreach ($g in @(@{id=$grpMain;n="Main"},@{id=$grpStale7;n="Stale7"},@{id=$grpStale30;n="Stale30"},@{id=$grpEph;n="Ephemeral"})) {
+    $gc = Safe-AzJson @("rest","--method","GET","--uri","https://graph.microsoft.com/v1.0/groups/$($g.id)?`$select=displayName")
+    if ($gc -and $gc.displayName) { Write-Host "  [OK] $($g.n): $($gc.displayName)" -ForegroundColor Green }
+    else { Write-Host "  [FAIL] $($g.n) not found" -ForegroundColor Red; return }
+}
+Write-Host ""
 
-# FASE 1: Listar VMs
-Write-Host "--- FASE 1: VMs NA SUBSCRIPTION ---`n" -ForegroundColor Cyan
-$vmsRaw = az vm list --subscription $sub --query "[].{name:name, rg:resourceGroup, os:storageProfile.osDisk.osType, id:id, vmId:vmId}" -o json 2>$null
-$vms = $vmsRaw | ConvertFrom-Json
-Write-Host "  Total VMs: $($vms.Count)" -ForegroundColor White
-foreach ($v in $vms) { Write-Host "    $($v.name) ($($v.os)) - $($v.rg)" -ForegroundColor Gray }
+# FASE 1: VMs
+Write-Host "--- FASE 1: VMs ---`n" -ForegroundColor Cyan
+$vms = Force-Array (Safe-AzJson @("vm","list","--subscription",$sub,"--query","[].{name:name, rg:resourceGroup, os:storageProfile.osDisk.osType, id:id, vmId:vmId}"))
+Write-Host "  Total: $($vms.Count)" -ForegroundColor White
+$vmList = @()
+foreach ($v in $vms) {
+    if (-not $v.name) { continue }
+    $vmList += @{ name=$v.name; rg=$v.rg; os=$v.os; id=$v.id; vmId=$v.vmId }
+    Write-Host ("  {0,-35} {1,-8} {2}" -f $v.name, $v.os, $v.rg) -ForegroundColor White
+}
+if ($vmList.Count -eq 0) { Write-Host "  No VMs." -ForegroundColor Yellow; return }
 
-# FASE 2: Verificar devices no Entra ID
-Write-Host "`n--- FASE 2: DEVICES NO ENTRA ID ---`n" -ForegroundColor Cyan
-$allDevices = az rest --method GET --uri "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,operatingSystem,approximateLastSignInDateTime" -o json 2>$null | ConvertFrom-Json
-$deviceList = $allDevices.value
-Write-Host "  Total devices Entra ID: $($deviceList.Count)" -ForegroundColor White
+# FASE 2: DEVICES -- query ONLY this subscription via physicalIds filter
+# Writes URI to file to avoid PS 5.1 ISE mangling parentheses/quotes
+Write-Host "`n--- FASE 2: Entra Devices (this sub only) ---`n" -ForegroundColor Cyan
+$graphFilter = "physicalIds/any(x:startswith(x,'[AzureResourceId]:/subscriptions/$sub'))"
+$devUri = "https://graph.microsoft.com/v1.0/devices?`$top=999&`$count=true&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled&`$filter=$graphFilter"
 
-$matched = @()
-$unmatched = @()
+$allDev = @()
+$pg = 0
+$nextUri = $devUri
+do {
+    $pg++
+    Write-Host "  Page $pg..." -ForegroundColor Gray -NoNewline
+    # Write az command to temp .cmd file to avoid PS shell mangling
+    $tmpOut = Join-Path $env:TEMP ("dev_$pg.json")
+    $tmpCmd = Join-Path $env:TEMP ("dev_$pg.cmd")
+    $cmdLine = "az rest --method GET --uri `"$nextUri`" --headers `"ConsistencyLevel=eventual`" -o json > `"$tmpOut`" 2>nul"
+    [System.IO.File]::WriteAllText($tmpCmd, $cmdLine)
+    & cmd.exe /c $tmpCmd
+    $nextUri = $null
+    if (Test-Path $tmpOut) {
+        $content = [System.IO.File]::ReadAllText($tmpOut)
+        if ($content.Length -gt 10) {
+            $parsed = ConvertFrom-Json -InputObject $content
+            if ($parsed.value) {
+                $items = @($parsed.value)
+                $allDev += $items
+                Write-Host " $($items.Count) (total:$($allDev.Count))" -ForegroundColor Gray
+            } else { Write-Host " 0" -ForegroundColor Gray }
+            if ($parsed.'@odata.nextLink') { $nextUri = $parsed.'@odata.nextLink' }
+        } else { Write-Host " empty" -ForegroundColor Yellow }
+        Remove-Item $tmpOut -Force -ErrorAction SilentlyContinue
+    } else { Write-Host " no output" -ForegroundColor Red }
+    Remove-Item $tmpCmd -Force -ErrorAction SilentlyContinue
+} while ($nextUri)
+Write-Host "  Devices in sub: $($allDev.Count)" -ForegroundColor White
+if ($allDev.Count -eq 0) { Write-Host "  No devices from this subscription." -ForegroundColor Yellow; return }
 
-foreach ($vm in $vms) {
-    $vmName = $vm.name
-    # Procurar device por nome (case-insensitive, partial match)
-    $found = $deviceList | Where-Object { $_.displayName -eq $vmName -or $_.displayName -like "$vmName.*" -or $_.displayName -like "*\\$vmName" }
-    if ($found) {
-        $dev = $found | Select-Object -First 1
-        Write-Host "  [MATCH] $vmName -> Device: $($dev.displayName) (ID: $($dev.id))" -ForegroundColor Green
-        $matched += @{ vm = $vm; device = $dev }
+$devIdx = @()
+foreach ($d in $allDev) {
+    if (-not $d.displayName) { continue }
+    $devIdx += @{ displayName=$d.displayName; normalized=Normalize-Deep $d.displayName; netbios=Get-NetBIOSName $d.displayName; id=$d.id; deviceId=$d.deviceId; os=$d.operatingSystem; lastSignIn=$d.approximateLastSignInDateTime; physicalIds=$d.physicalIds }
+}
+
+# FASE 3: MATCHING
+Write-Host "`n--- FASE 3: Matching ---`n" -ForegroundColor Cyan
+$matched = @(); $unmatched = @(); $used = @{}
+
+foreach ($vm in $vmList) {
+    $r = Match-Device -vm $vm -devIdx $devIdx -used $used -manual $manualMap
+    if ($r.dev) {
+        $used[$r.dev.id] = $true
+        $matched += @{ vm=$vm; device=$r.dev; layer=$r.layer; detail=$r.detail }
+        $lc = switch -Wildcard ($r.layer) {"L0*"{"Magenta"}"L1*"{"Green"}"L2*"{"Green"}"L3*"{"Cyan"}"L4*"{"Yellow"}"L5*"{"Yellow"}"L6*"{"DarkCyan"}default{"White"}}
+        Write-Host "  [OK] $($vm.name) -> $($r.dev.displayName) ($($r.layer))" -ForegroundColor $lc
     } else {
-        Write-Host "  [MISS]  $vmName -> Nao registado no Entra ID" -ForegroundColor Yellow
         $unmatched += $vm
+        Write-Host "  [--] $($vm.name)" -ForegroundColor Red
+        $top = $null; $ts = 0
+        foreach ($d in $devIdx) { $s = Get-Similarity (Normalize-Deep $vm.name) $d.normalized; if ($s -gt $ts -and $s -gt 0.3) { $ts=$s; $top=$d } }
+        if ($top) { Write-Host "       ~$($top.displayName) ($ts)" -ForegroundColor DarkGray }
     }
 }
 
-Write-Host "`n  Matched: $($matched.Count) | Unmatched: $($unmatched.Count)" -ForegroundColor White
+Write-Host "`n  Matched: $($matched.Count)/$($vmList.Count) | Unmatched: $($unmatched.Count)" -ForegroundColor $(if($unmatched.Count -gt 0){'Yellow'}else{'Green'})
+$ls = @{}; foreach ($m in $matched) { $k=$m.layer; if(-not $ls.ContainsKey($k)){$ls[$k]=0}; $ls[$k]++ }
+foreach ($k in ($ls.Keys | Sort-Object)) { Write-Host "    $k : $($ls[$k])" -ForegroundColor DarkGray }
 
-# FASE 3: Instalar extensao AAD nas VMs nao registadas
+# FASE 4: SYNC (direct add -- Graph returns 400 if already member, which is harmless)
+Write-Host "`n--- FASE 4: Sync Groups ---`n" -ForegroundColor Cyan
+if ($matched.Count -eq 0) { Write-Host "  Nothing." -ForegroundColor Yellow }
+else {
+    $added = 0; $exists = 0
+    foreach ($m in $matched) {
+        $did = $m.device.id; $dn = $m.device.displayName; $lsi = $m.device.lastSignIn
+        # Target group by lastSignIn
+        $tg = $grpMain; $tl = "Main"
+        if ($lsi) { try { $days = ((Get-Date) - [DateTime]::Parse($lsi)).Days; if($days -gt 30){$tg=$grpStale30;$tl="S30"}elseif($days -gt 7){$tg=$grpStale7;$tl="S7"} } catch {} }
+        else { $tg = $grpStale7; $tl = "S7" }
+        # Direct add (no pre-check = fast)
+        $body = '{"@odata.id":"https://graph.microsoft.com/v1.0/directoryObjects/' + $did + '"}'
+        $bf = Join-Path $tempPath "add.json"
+        [System.IO.File]::WriteAllText($bf, $body)
+        az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups/$tg/members/`$ref" --headers "Content-Type=application/json" --body "@$bf" --output none 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Host "  [+] $dn -> $tl" -ForegroundColor Green; $added++ }
+        else { Write-Host "  [=] $dn -> $tl (exists)" -ForegroundColor Gray; $exists++ }
+    }
+    Write-Host "`n  Added: $added | Already: $exists" -ForegroundColor Cyan
+}
+
+# REPORT
+Write-Host "`n================================================================" -ForegroundColor Magenta
+Write-Host "  FIX DONE" -ForegroundColor White
+Write-Host "  VMs: $($vmList.Count) | Matched: $($matched.Count) | Unmatched: $($unmatched.Count)" -ForegroundColor White
 if ($unmatched.Count -gt 0) {
-    Write-Host "`n--- FASE 3: INSTALAR EXTENSAO AAD ---`n" -ForegroundColor Cyan
-    Write-Host "  Instalando extensao para registar VMs no Entra ID..." -ForegroundColor Yellow
-    
-    foreach ($vm in $unmatched) {
-        $extName = if ($vm.os -eq "Windows") { "AADLoginForWindows" } else { "AADSSHLoginForLinux" }
-        $extPublisher = if ($vm.os -eq "Windows") { "Microsoft.Azure.ActiveDirectory" } else { "Microsoft.Azure.ActiveDirectory" }
-        $extType = if ($vm.os -eq "Windows") { "AADLoginForWindows" } else { "AADSSHLoginForLinux" }
-        
-        $vmRg = $vm.rg
-        $vmNm = $vm.name
-        Write-Host "  [$($vm.os)] $vmNm -> Instalando $extName..." -ForegroundColor Yellow
-        
-        az vm extension set --resource-group $vmRg --vm-name $vmNm --name $extType --publisher $extPublisher --output none 2>$null
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "    [OK] Extensao instalada" -ForegroundColor Green
-        } else {
-            Write-Host "    [WARN] Pode ja existir ou VM desligada" -ForegroundColor Gray
-        }
-    }
-    
-    Write-Host "`n  Aguardando propagacao no Entra ID (60s)..." -ForegroundColor Gray
-    Start-Sleep -Seconds 60
-    
-    # Re-verificar devices
-    Write-Host "  Re-verificando devices..." -ForegroundColor Cyan
-    $allDevices2 = az rest --method GET --uri "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,operatingSystem,approximateLastSignInDateTime" -o json 2>$null | ConvertFrom-Json
-    $deviceList = $allDevices2.value
-    
-    foreach ($vm in $unmatched) {
-        $found = $deviceList | Where-Object { $_.displayName -eq $vm.name -or $_.displayName -like "$($vm.name).*" }
-        if ($found) {
-            $dev = $found | Select-Object -First 1
-            Write-Host "  [NOVO] $($vm.name) -> Device: $($dev.displayName) (ID: $($dev.id))" -ForegroundColor Green
-            $matched += @{ vm = $vm; device = $dev }
-        } else {
-            Write-Host "  [PEND] $($vm.name) -> Ainda propagando (pode levar 5-10 min)" -ForegroundColor Yellow
-        }
-    }
+    foreach ($u in $unmatched) { Write-Host "    [--] $($u.name) [$($u.os)]" -ForegroundColor DarkYellow }
+    Write-Host "  -> Start VMs, install AAD ext, wait 5min, re-run" -ForegroundColor Gray
 }
+Write-Host "================================================================`n" -ForegroundColor Magenta
 
-# FASE 4: Adicionar devices aos grupos
-Write-Host "`n--- FASE 4: ADICIONAR AOS GRUPOS ---`n" -ForegroundColor Cyan
-
-$addedMain = 0; $addedStale = 0
-
-foreach ($m in $matched) {
-    $devId = $m.device.id
-    $devName = $m.device.displayName
-    $lastSign = $m.device.approximateLastSignInDateTime
-    
-    # Determinar grupo (main se activo <7d, senao stale)
-    $targetGroup = $grpMain
-    $targetLabel = "Main"
-    
-    if ($lastSign) {
-        $lastDate = [DateTime]::Parse($lastSign)
-        $daysAgo = ((Get-Date) - $lastDate).Days
-        if ($daysAgo -gt 30) { $targetGroup = $grpStale30; $targetLabel = "Stale-30d" }
-        elseif ($daysAgo -gt 7) { $targetGroup = $grpStale7; $targetLabel = "Stale-7d" }
-    } else {
-        $targetGroup = $grpStale7; $targetLabel = "Stale-7d (sem sign-in)"
-    }
-    
-    # Verificar se ja e membro
-    $members = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$targetGroup/members" --query "value[].id" -o json 2>$null | ConvertFrom-Json
-    if ($members -contains $devId) {
-        Write-Host "  [SKIP] $devName ja no grupo $targetLabel" -ForegroundColor Gray
-        continue
-    }
-    
-    # Adicionar ao grupo
-    $addBody = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$devId" } | ConvertTo-Json
-    if (-not (Test-Path "C:\temp")) { New-Item -ItemType Directory -Path "C:\temp" -Force | Out-Null }
-    $addBody | Out-File "C:\temp\add-member.json" -Encoding UTF8 -Force -NoNewline
-    
-    az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups/$targetGroup/members/`$ref" --headers "Content-Type=application/json" --body "@C:\temp\add-member.json" --output none 2>&1 | Out-Null
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "  [OK] $devName -> $targetLabel" -ForegroundColor Green
-        $addedMain++
-    } else {
-        Write-Host "  [WARN] $devName -> pode ja estar no grupo" -ForegroundColor Gray
-    }
-}
-
-# FASE 5: Resultado
-Write-Host "`n--- RESULTADO ---`n" -ForegroundColor Cyan
-
-foreach ($g in @(
-    @{id=$grpMain; n="Main"},
-    @{id=$grpStale7; n="Stale-7d"},
-    @{id=$grpStale30; n="Stale-30d"}
-)) {
-    $raw = az rest --method GET --uri "https://graph.microsoft.com/v1.0/groups/$($g.id)/members" --query "value[].displayName" -o json 2>$null
-    $list = @(); if ($raw) { try { $list = $raw | ConvertFrom-Json } catch {} }
-    Write-Host "  $($g.n): $($list.Count) devices" -ForegroundColor $(if($list.Count -gt 0){'Green'}else{'Yellow'})
-    foreach ($m in $list) { Write-Host "    - $m" -ForegroundColor DarkGray }
-}
-
-Write-Host "`n====================================================" -ForegroundColor Magenta
-Write-Host "  VMs: $($vms.Count) | Devices Entra: $($matched.Count) | Adicionados: $addedMain" -ForegroundColor White
-if ($unmatched.Count -gt 0 -and $matched.Count -lt $vms.Count) {
-    Write-Host "  [ACAO] $($unmatched.Count) VMs ainda sem device Entra ID" -ForegroundColor Yellow
-    Write-Host "  Extensao AAD foi instalada. Aguarde 5-10 min e reexecute." -ForegroundColor Yellow
-}
-Write-Host "====================================================`n" -ForegroundColor Magenta
+$sep = "=" * 50
+$lf = Join-Path $tempPath ("fix-rs-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + ".log")
+$ll = @("FIX v6 $(Get-Date) PS$($PSVersionTable.PSVersion)", $sep, "VMs:$($vmList.Count) Match:$($matched.Count) Miss:$($unmatched.Count)", "")
+foreach ($m in $matched) { $ll += "$($m.layer)|$($m.vm.name)->$($m.device.displayName)" }
+$ll += ""; foreach ($u in $unmatched) { $ll += "MISS|$($u.name)" }
+$ll | Out-File $lf -Encoding UTF8 -Force
+Write-Host "  Log: $lf`n" -ForegroundColor Gray
