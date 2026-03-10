@@ -183,26 +183,42 @@ foreach ($v in $vms) {
 }
 if ($vmList.Count -eq 0) { Write-Host "  No VMs." -ForegroundColor Yellow; return }
 
-# FASE 2: DEVICES -- 1 SINGLE QUERY filtered by subscription ID in physicalIds
-# physicalIds contains [AzureResourceId]:/subscriptions/{subId}/...
-# This returns ONLY devices from THIS subscription. No full tenant scan.
-Write-Host "`n--- FASE 2: Entra Devices (subscription only) ---`n" -ForegroundColor Cyan
-$filterUri = 'https://graph.microsoft.com/v1.0/devices?$top=999&$count=true&$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled&$filter=physicalIds/any(x:startswith(x,''[AzureResourceId]:/subscriptions/' + $sub + '''))'
+# FASE 2: DEVICES -- query ONLY this subscription via physicalIds filter
+# Writes URI to file to avoid PS 5.1 ISE mangling parentheses/quotes
+Write-Host "`n--- FASE 2: Entra Devices (this sub only) ---`n" -ForegroundColor Cyan
+$graphFilter = "physicalIds/any(x:startswith(x,'[AzureResourceId]:/subscriptions/$sub'))"
+$devUri = "https://graph.microsoft.com/v1.0/devices?`$top=999&`$count=true&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime,accountEnabled&`$filter=$graphFilter"
+
 $allDev = @()
 $pg = 0
-$currentUri = $filterUri
+$nextUri = $devUri
 do {
     $pg++
     Write-Host "  Page $pg..." -ForegroundColor Gray -NoNewline
-    $r = Safe-AzJson @("rest","--method","GET","--uri",$currentUri,"--headers","ConsistencyLevel=eventual")
-    if (-not $r) { Write-Host " err" -ForegroundColor Red; break }
-    if ($r.value) { $items = @($r.value); $allDev += $items; Write-Host " $($items.Count) (total:$($allDev.Count))" -ForegroundColor Gray }
-    else { Write-Host " 0" -ForegroundColor Gray }
-    $currentUri = $null
-    if ($r.'@odata.nextLink') { $currentUri = $r.'@odata.nextLink' }
-} while ($currentUri)
+    # Write az command to temp .cmd file to avoid PS shell mangling
+    $tmpOut = Join-Path $env:TEMP ("dev_$pg.json")
+    $tmpCmd = Join-Path $env:TEMP ("dev_$pg.cmd")
+    $cmdLine = "az rest --method GET --uri `"$nextUri`" --headers `"ConsistencyLevel=eventual`" -o json > `"$tmpOut`" 2>nul"
+    [System.IO.File]::WriteAllText($tmpCmd, $cmdLine)
+    & cmd.exe /c $tmpCmd
+    $nextUri = $null
+    if (Test-Path $tmpOut) {
+        $content = [System.IO.File]::ReadAllText($tmpOut)
+        if ($content.Length -gt 10) {
+            $parsed = ConvertFrom-Json -InputObject $content
+            if ($parsed.value) {
+                $items = @($parsed.value)
+                $allDev += $items
+                Write-Host " $($items.Count) (total:$($allDev.Count))" -ForegroundColor Gray
+            } else { Write-Host " 0" -ForegroundColor Gray }
+            if ($parsed.'@odata.nextLink') { $nextUri = $parsed.'@odata.nextLink' }
+        } else { Write-Host " empty" -ForegroundColor Yellow }
+        Remove-Item $tmpOut -Force -ErrorAction SilentlyContinue
+    } else { Write-Host " no output" -ForegroundColor Red }
+    Remove-Item $tmpCmd -Force -ErrorAction SilentlyContinue
+} while ($nextUri)
 Write-Host "  Devices in sub: $($allDev.Count)" -ForegroundColor White
-if ($allDev.Count -eq 0) { Write-Host "  No devices registered from this subscription." -ForegroundColor Yellow; return }
+if ($allDev.Count -eq 0) { Write-Host "  No devices from this subscription." -ForegroundColor Yellow; return }
 
 $devIdx = @()
 foreach ($d in $allDev) {
