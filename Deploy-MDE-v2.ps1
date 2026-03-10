@@ -780,32 +780,54 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
         Write-Step "Aguardando propagacao de permissoes (15s)..." "WAIT"
         Start-Sleep -Seconds 15
 
-        # 10c: Obter token MDE (com retry)
+        # 10c: Obter token MDE (auto-detect endpoint)
+        # Tenants podem usar api.securitycenter.microsoft.com OU api.security.microsoft.com
+        # Tentamos ambos scopes e usamos o que retorna roles no token
         $encodedSecret = [System.Uri]::EscapeDataString($clientSecret)
-        $tokenBody = "client_id=" + $appId + "&client_secret=" + $encodedSecret + "&scope=https%3A%2F%2Fapi.security.microsoft.com%2F.default&grant_type=client_credentials"
         $mdeToken = $null
-        $tokenRetries = 3
-        for ($retry = 1; $retry -le $tokenRetries; $retry++) {
-            try {
-                $tokenResponse = Invoke-RestMethod -Method POST -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body $tokenBody -ErrorAction Stop
-                $mdeToken = $tokenResponse.access_token
-                break
-            } catch {
-                Write-Step "Token tentativa $retry/$tokenRetries - aguardando 10s..." "WAIT"
-                Start-Sleep -Seconds 10
+        $mdeBaseUrl = $null
+
+        foreach ($mdeScope in @("api.securitycenter.microsoft.com", "api.security.microsoft.com")) {
+            $scopeEncoded = [System.Uri]::EscapeDataString("https://$mdeScope/.default")
+            $tokenBody = "client_id=" + $appId + "&client_secret=" + $encodedSecret + "&scope=" + $scopeEncoded + "&grant_type=client_credentials"
+            for ($retry = 1; $retry -le 3; $retry++) {
+                try {
+                    $tokenResponse = Invoke-RestMethod -Method POST -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -ContentType "application/x-www-form-urlencoded" -Body $tokenBody -ErrorAction Stop
+                    $candidate = $tokenResponse.access_token
+                    # Verificar se o token tem roles (decodificar JWT payload)
+                    $jwtParts = $candidate.Split('.')
+                    $jwtPayload = $jwtParts[1]
+                    $padLen = 4 - ($jwtPayload.Length % 4)
+                    if ($padLen -lt 4) { $jwtPayload += ('=' * $padLen) }
+                    $jwtJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($jwtPayload))
+                    $jwtObj = ConvertFrom-Json -InputObject $jwtJson
+                    if ($jwtObj.roles -and $jwtObj.roles.Count -gt 0) {
+                        $mdeToken = $candidate
+                        $mdeBaseUrl = "https://$mdeScope"
+                        Write-Step "Token MDE obtido (scope: $mdeScope)" "OK"
+                        $rolesList = $jwtObj.roles -join ', '
+                        Write-Tech "Roles: $rolesList"
+                        break
+                    } else {
+                        Write-Tech "Scope ${mdeScope}: token sem roles, tentando proximo..."
+                    }
+                    break
+                } catch {
+                    if ($retry -lt 3) { Start-Sleep -Seconds 5 }
+                }
             }
+            if ($mdeToken) { break }
         }
 
         if (-not $mdeToken) {
-            Write-Step "Falha ao obter token MDE apos $tokenRetries tentativas" "ERROR"
-            Write-Tech "Possivel causa: permissao ainda nao propagou. Re-execute em 5 min."
+            Write-Step "Falha ao obter token MDE com roles" "ERROR"
+            Write-Tech "Possivel causa: MDE nao onboarded ou permissao nao propagou."
         } else {
-            Write-Step "Token MDE obtido" "OK"
 
             # 10d: Listar machines MDE (com paginacao)
             $mdeHeaders = @{ Authorization = "Bearer $mdeToken" }
             $mdeMachines = @()
-            $mdeUri = "https://api.security.microsoft.com/api/machines"
+            $mdeUri = "$mdeBaseUrl/api/machines"
             do {
                 try {
                     $mdeResponse = Invoke-RestMethod -Method GET -Uri $mdeUri -Headers $mdeHeaders -ErrorAction Stop
@@ -917,7 +939,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
                     foreach ($tr in $toRemove) {
                         $removeBody = @{ Value = $tr; Action = "Remove" } | ConvertTo-Json
                         try {
-                            Invoke-RestMethod -Method POST -Uri "https://api.security.microsoft.com/api/machines/$machineId/tags" -Headers $mdeHeaders -ContentType "application/json" -Body $removeBody -ErrorAction Stop | Out-Null
+                            Invoke-RestMethod -Method POST -Uri "$mdeBaseUrl/api/machines/$machineId/tags" -Headers $mdeHeaders -ContentType "application/json" -Body $removeBody -ErrorAction Stop | Out-Null
                         } catch { $tagSuccess = $false }
                         Start-Sleep -Milliseconds 500
                     }
@@ -926,7 +948,7 @@ if (-not $appId -or -not $appObjectId -or $matched.Count -eq 0) {
                     foreach ($ta in $toAdd) {
                         $addTagBody = @{ Value = $ta; Action = "Add" } | ConvertTo-Json
                         try {
-                            Invoke-RestMethod -Method POST -Uri "https://api.security.microsoft.com/api/machines/$machineId/tags" -Headers $mdeHeaders -ContentType "application/json" -Body $addTagBody -ErrorAction Stop | Out-Null
+                            Invoke-RestMethod -Method POST -Uri "$mdeBaseUrl/api/machines/$machineId/tags" -Headers $mdeHeaders -ContentType "application/json" -Body $addTagBody -ErrorAction Stop | Out-Null
                         } catch { $tagSuccess = $false }
                         Start-Sleep -Milliseconds 500
                     }
