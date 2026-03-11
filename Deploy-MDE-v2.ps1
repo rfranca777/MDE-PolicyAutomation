@@ -129,6 +129,30 @@ function Get-AllEntraDevices {
     return ,$allDevices
 }
 
+function Find-DeviceForVM {
+    # Targeted Graph API query - busca device especifico por nome da VM
+    # 1 chamada por VM em vez de paginar milhares de devices do tenant
+    param([string]$VMName, [string]$VMResourceId)
+    $escapedName = $VMName -replace "'", "''"
+    $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=displayName eq '$escapedName'&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime"
+    $responseRaw = az rest --method GET --uri $uri -o json 2>$null
+    $response = Safe-Parse $responseRaw
+    if (-not $response -or -not $response.value) { return $null }
+    $vmResLower = $VMResourceId.ToLower()
+    # L1: physicalIds match (exact - 95%)
+    foreach ($dev in $response.value) {
+        if ($dev.physicalIds -and ($dev.physicalIds | Where-Object { $_.ToLower() -like "*$vmResLower*" })) {
+            return $dev
+        }
+    }
+    # L2: name match (fallback - 80%)
+    $nameNorm = Normalize-Name $VMName
+    foreach ($dev in $response.value) {
+        if ((Normalize-Name $dev.displayName) -eq $nameNorm) { return $dev }
+    }
+    return $null
+}
+
 # ============================================================
 # DETECCAO DE AMBIENTE
 # ============================================================
@@ -383,27 +407,22 @@ $mdeNoMatch = 0
 if ($vms.Count -eq 0) {
     Write-Step "Nenhuma VM encontrada - pulando Stages 5, 6 e 10" "SKIP"
 } else {
-    # Listar devices Entra ID (paginado - suporta >999 devices)
-    Write-Step "Consultando devices no Entra ID (Graph API paginada)..." "WAIT"
-    $deviceList = Get-AllEntraDevices
-    Write-Step "Devices no Entra ID: $($deviceList.Count)" "INFO"
-
-    # Verificar quais VMs ja tem device via physicalIds (Azure Resource ID)
+    # Buscar devices por VM (query individual - rapido mesmo em tenants grandes)
+    Write-Step "Verificando devices Entra ID por VM (query individual)..." "WAIT"
+    Write-Tech "$($vms.Count) VMs = $($vms.Count) queries Graph API (em vez de paginar todo o tenant)"
+    $vmDeviceMap = @{}
     $needsExtension = @()
     foreach ($vm in $vms) {
-        $vmResourceId = $vm.id.ToLower()
-        $foundByPhysical = $deviceList | Where-Object {
-            $_.physicalIds -and ($_.physicalIds | Where-Object { $_ -like "*$vmResourceId*" })
-        }
-        if (-not $foundByPhysical) {
-            $foundByName = $deviceList | Where-Object { (Normalize-Name $_.displayName) -eq (Normalize-Name $vm.name) }
-            if (-not $foundByName) {
-                $needsExtension += $vm
-            }
+        $dev = Find-DeviceForVM -VMName $vm.name -VMResourceId $vm.id
+        if ($dev) {
+            $vmDeviceMap[$vm.name] = $dev
+            Write-Host "     [OK] $($vm.name) → $($dev.displayName)" -ForegroundColor Green
+        } else {
+            $needsExtension += $vm
+            Write-Host "     [--] $($vm.name) → sem device" -ForegroundColor Gray
         }
     }
-
-    Write-Step "VMs sem device Entra ID: $($needsExtension.Count)" "INFO"
+    Write-Step "Com device: $($vmDeviceMap.Count) | Sem device: $($needsExtension.Count)" "INFO"
 
     if ($needsExtension.Count -gt 0) {
         Write-Step "Instalando extensao AAD em paralelo..." "WAIT"
@@ -447,10 +466,18 @@ if ($vms.Count -eq 0) {
         Write-Tech "Device registration pode levar 30-120s apos extensao instalada"
         Start-Sleep -Seconds 60
 
-        # Recarregar devices (paginado)
-        Write-Step "Recarregando devices Entra ID apos extensao (Graph API)..." "WAIT"
-        $deviceList = Get-AllEntraDevices
-        Write-Step "Devices apos extensao: $($deviceList.Count)" "INFO"
+        # Recarregar apenas VMs que precisavam de extensao (query individual)
+        Write-Step "Verificando devices das VMs recem-registadas..." "WAIT"
+        foreach ($vm in $needsExtension) {
+            $dev = Find-DeviceForVM -VMName $vm.name -VMResourceId $vm.id
+            if ($dev) {
+                $vmDeviceMap[$vm.name] = $dev
+                Write-Host "     [OK] $($vm.name) → registado ($($dev.displayName))" -ForegroundColor Green
+            } else {
+                Write-Host "     [--] $($vm.name) → ainda nao propagou" -ForegroundColor Yellow
+            }
+        }
+        Write-Step "Devices encontrados: $($vmDeviceMap.Count) / $($vms.Count)" "INFO"
     }
 
     # ============================================================
@@ -467,18 +494,11 @@ if ($vms.Count -eq 0) {
     $unmatched = @()
 
     foreach ($vm in $vms) {
-        $vmResourceId = $vm.id.ToLower()
-        $vmNameNorm = Normalize-Name $vm.name
-        $dev = $null
+        $dev = $vmDeviceMap[$vm.name]
 
-        # LAYER 1: Match por physicalIds (Azure Resource ID)
-        $dev = $deviceList | Where-Object {
-            $_.physicalIds -and ($_.physicalIds | Where-Object { $_.ToLower() -like "*$vmResourceId*" })
-        } | Select-Object -First 1
-
-        # LAYER 2: Match por nome normalizado
+        # Fallback: se nao encontrou no mapa, tenta query directa
         if (-not $dev) {
-            $dev = $deviceList | Where-Object { (Normalize-Name $_.displayName) -eq $vmNameNorm } | Select-Object -First 1
+            $dev = Find-DeviceForVM -VMName $vm.name -VMResourceId $vm.id
         }
 
         if ($dev) {
