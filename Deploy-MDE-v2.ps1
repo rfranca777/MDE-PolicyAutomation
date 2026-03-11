@@ -114,9 +114,9 @@ function Get-AllEntraDevices {
     $page = 1
     do {
         Write-Host "     Pagina $page da Graph API (devices carregados: $($allDevices.Count))..." -ForegroundColor Gray
-        $responseRaw = az rest --method GET --uri $uri --timeout 30 -o json 2>$null
+        $responseRaw = az rest --method GET --uri $uri -o json 2>$null
         if (-not $responseRaw) {
-            Write-Host "     AVISO: Graph API nao respondeu (timeout 30s). Retornando devices coletados ate agora." -ForegroundColor Yellow
+            Write-Host "     AVISO: Graph API nao respondeu na pagina $page. Retornando $($allDevices.Count) devices coletados." -ForegroundColor Yellow
             break
         }
         $response = Safe-Parse $responseRaw
