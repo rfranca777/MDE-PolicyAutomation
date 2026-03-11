@@ -111,13 +111,20 @@ function Get-AllEntraDevices {
     # Paginated Graph API fetch - handles tenants with >999 devices
     $allDevices = @()
     $uri = "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime"
+    $page = 1
     do {
-        $responseRaw = az rest --method GET --uri $uri -o json 2>$null
+        Write-Host "     Pagina $page da Graph API (devices carregados: $($allDevices.Count))..." -ForegroundColor Gray
+        $responseRaw = az rest --method GET --uri $uri --timeout 30 -o json 2>$null
+        if (-not $responseRaw) {
+            Write-Host "     AVISO: Graph API nao respondeu (timeout 30s). Retornando devices coletados ate agora." -ForegroundColor Yellow
+            break
+        }
         $response = Safe-Parse $responseRaw
         if ($response -and $response.value) {
             $allDevices += $response.value
         }
         $uri = if ($response -and $response.'@odata.nextLink') { $response.'@odata.nextLink' } else { $null }
+        $page++
     } while ($uri)
     return ,$allDevices
 }
@@ -377,6 +384,7 @@ if ($vms.Count -eq 0) {
     Write-Step "Nenhuma VM encontrada - pulando Stages 5, 6 e 10" "SKIP"
 } else {
     # Listar devices Entra ID (paginado - suporta >999 devices)
+    Write-Step "Consultando devices no Entra ID (Graph API paginada)..." "WAIT"
     $deviceList = Get-AllEntraDevices
     Write-Step "Devices no Entra ID: $($deviceList.Count)" "INFO"
 
@@ -440,6 +448,7 @@ if ($vms.Count -eq 0) {
         Start-Sleep -Seconds 60
 
         # Recarregar devices (paginado)
+        Write-Step "Recarregando devices Entra ID apos extensao (Graph API)..." "WAIT"
         $deviceList = Get-AllEntraDevices
         Write-Step "Devices apos extensao: $($deviceList.Count)" "INFO"
     }
