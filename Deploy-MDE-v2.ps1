@@ -403,12 +403,30 @@ if ($vms.Count -eq 0) {
     Write-Step "Com device: $($vmDeviceMap.Count) | Sem device: $($needsExtension.Count)" "INFO"
 
     if ($needsExtension.Count -gt 0) {
-        Write-Step "Instalando extensao AAD em paralelo..." "WAIT"
+        # Filtrar VMs ligadas (extensao nao instala em VMs desligadas)
+        Write-Step "Verificando power state das $($needsExtension.Count) VMs..." "WAIT"
+        $vmsToInstall = @()
+        $vmsSkipped = @()
+        foreach ($vm in $needsExtension) {
+            $powerRaw = az vm get-instance-view --ids $vm.id --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus" -o tsv 2>$null
+            if ($powerRaw -and $powerRaw -like "*running*") {
+                $vmsToInstall += $vm
+            } else {
+                $vmsSkipped += $vm
+                Write-Host "     [SKIP] $($vm.name) → desligada ($powerRaw)" -ForegroundColor Yellow
+            }
+        }
+        if ($vmsSkipped.Count -gt 0) {
+            Write-Step "VMs desligadas (puladas): $($vmsSkipped.Count)" "INFO"
+        }
+
+        if ($vmsToInstall.Count -gt 0) {
+        Write-Step "Instalando extensao AAD em paralelo ($($vmsToInstall.Count) VMs running)..." "WAIT"
         Write-Tech "Windows: AADLoginForWindows | Linux: AADSSHLoginForLinux"
         Write-Tech "Publisher: Microsoft.Azure.ActiveDirectory"
 
         $jobs = @()
-        foreach ($vm in $needsExtension) {
+        foreach ($vm in $vmsToInstall) {
             $vmRg = $vm.rg
             $vmNm = $vm.name
             $extType = if ($vm.os -eq "Windows") { "AADLoginForWindows" } else { "AADSSHLoginForLinux" }
@@ -425,24 +443,31 @@ if ($vms.Count -eq 0) {
             # Batch de 10 - aguardar antes do proximo batch
             if ($jobs.Count % 10 -eq 0) {
                 Write-Tech "Aguardando batch de 10..."
-                $jobs | Wait-Job -Timeout 600 | Out-Null
+                $jobs | Wait-Job -Timeout 180 | Out-Null
             }
         }
 
-        # Aguardar todos os jobs restantes
-        Write-Step "Aguardando conclusao de $($jobs.Count) instalacoes..." "WAIT"
-        $jobs | Wait-Job -Timeout 600 | Out-Null
+        # Aguardar todos os jobs restantes (max 3 min)
+        Write-Step "Aguardando conclusao de $($jobs.Count) instalacoes (max 3 min)..." "WAIT"
+        $waitStart = Get-Date
+        $jobs | Wait-Job -Timeout 180 | Out-Null
 
         foreach ($j in $jobs) {
-            $result = Receive-Job -Job $j
-            $status = if ($j.State -eq "Completed" -and $result.exit -eq 0) { "OK" } else { "WARN" }
-            Write-Host "     [$status] $($result.name)" -ForegroundColor $(if($status -eq 'OK'){'Green'}else{'Yellow'})
+            if ($j.State -eq "Running") {
+                Write-Host "     [TIMEOUT] Job ainda running - forçando stop" -ForegroundColor Yellow
+                $j | Stop-Job -PassThru | Out-Null
+            }
+            $result = Receive-Job -Job $j -ErrorAction SilentlyContinue
+            $jName = if ($result -and $result.name) { $result.name } else { "unknown" }
+            $status = if ($j.State -eq "Completed" -and $result -and $result.exit -eq 0) { "OK" } else { "WARN" }
+            Write-Host "     [$status] $jName" -ForegroundColor $(if($status -eq 'OK'){'Green'}else{'Yellow'})
         }
         $jobs | Remove-Job -Force
 
         Write-Step "Aguardando propagacao Entra ID (60s)..." "WAIT"
         Write-Tech "Device registration pode levar 30-120s apos extensao instalada"
         Start-Sleep -Seconds 60
+        } # fim vmsToInstall > 0
 
         # Recarregar apenas VMs que precisavam de extensao (query individual)
         Write-Step "Verificando devices das VMs recem-registadas..." "WAIT"
