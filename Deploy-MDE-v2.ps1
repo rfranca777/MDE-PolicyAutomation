@@ -107,28 +107,6 @@ function Safe-Parse {
     }
 }
 
-function Get-AllEntraDevices {
-    # Paginated Graph API fetch - handles tenants with >999 devices
-    $allDevices = @()
-    $uri = "https://graph.microsoft.com/v1.0/devices?`$top=999&`$select=displayName,id,deviceId,physicalIds,operatingSystem,approximateLastSignInDateTime"
-    $page = 1
-    do {
-        Write-Host "     Pagina $page da Graph API (devices carregados: $($allDevices.Count))..." -ForegroundColor Gray
-        $responseRaw = az rest --method GET --uri $uri -o json 2>$null
-        if (-not $responseRaw) {
-            Write-Host "     AVISO: Graph API nao respondeu na pagina $page. Retornando $($allDevices.Count) devices coletados." -ForegroundColor Yellow
-            break
-        }
-        $response = Safe-Parse $responseRaw
-        if ($response -and $response.value) {
-            $allDevices += $response.value
-        }
-        $uri = if ($response -and $response.'@odata.nextLink') { $response.'@odata.nextLink' } else { $null }
-        $page++
-    } while ($uri)
-    return ,$allDevices
-}
-
 function Find-DeviceForVM {
     # Targeted Graph API query - busca device especifico por nome da VM
     # 1 chamada por VM em vez de paginar milhares de devices do tenant
