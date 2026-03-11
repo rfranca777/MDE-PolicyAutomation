@@ -540,10 +540,8 @@ if ($vms.Count -eq 0) {
         # Adicionar ao grupo GLOBAL correspondente
         $globalGroupId = $globalGroupIds[$globalTag]
         if ($globalGroupId) {
-            if (-not (Test-Path (Join-Path $tempPath "add-member.json"))) {
-                $addBody = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$devId" } | ConvertTo-Json
-                $addBody | Out-File (Join-Path $tempPath "add-member.json") -Encoding UTF8 -Force -NoNewline
-            }
+            $addBody = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$devId" } | ConvertTo-Json
+            $addBody | Out-File (Join-Path $tempPath "add-member.json") -Encoding UTF8 -Force -NoNewline
             az rest --method POST --uri "https://graph.microsoft.com/v1.0/groups/$globalGroupId/members/`$ref" --headers "Content-Type=application/json" --body "@$(Join-Path $tempPath 'add-member.json')" --output none 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "     [+] $devName → GLOBAL:$globalTag" -ForegroundColor DarkGreen
